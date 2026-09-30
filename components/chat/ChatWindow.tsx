@@ -77,7 +77,8 @@ export function ChatWindow({ chatId }: { chatId: string }) {
           placeholder="Send a message…"
           onSubmit={() => send(text)}
           onStop={() => stop.mutate()}
-          running={running}
+          // while a message is on its way the run isn't known yet, but Stop already works: it cancels the run the moment it starts
+          running={running || isSending || pending.length > 0}
           sending={isSending}
         />
       </div>

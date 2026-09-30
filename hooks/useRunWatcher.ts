@@ -2,6 +2,8 @@
 
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { cancelRun } from "@/lib/cancelRun";
 import { ApiError } from "@/lib/queryClient";
 import { RUN_POLL_MS } from "@/lib/timing";
 import { useChatStore } from "@/stores/chatStore";
@@ -43,7 +45,19 @@ export function useRunWatcher(chatId: string) {
     if (!data || gone) return;
     if (data.run && !run) {
       // a run we didn't start in this tab (a reload, or another device)
-      setRun(chatId, { runId: data.run.id, triggerRunId: data.run.triggerRunId, startedAt: dataUpdatedAt });
+      setRun(chatId, {
+        runId: data.run.id,
+        triggerRunId: data.run.triggerRunId,
+        realtimeToken: data.realtimeToken,
+        realtimeTokenExpiresAt: data.realtimeTokenExpiresAt,
+        startedAt: dataUpdatedAt,
+      });
+      // Stop was pressed while we didn't yet know the run (a send that timed out, then turned up here)
+      const store = useChatStore.getState();
+      if (store.stopRequested[chatId]) {
+        store.clearStopRequest(chatId);
+        cancelRun(api, data.run.id).catch((error: Error) => toast.error("Couldn't stop the response", { description: error.message }));
+      }
     } else if (!data.run && run && dataUpdatedAt > run.startedAt) {
       // only an answer newer than the run counts; an older "no run" predates it
       clearRun(chatId);
@@ -51,7 +65,7 @@ export function useRunWatcher(chatId: string) {
         queryClient.invalidateQueries({ queryKey });
       }
     }
-  }, [data, gone, dataUpdatedAt, run, chatId, setRun, clearRun, queryClient]);
+  }, [data, gone, dataUpdatedAt, run, chatId, setRun, clearRun, queryClient, api]);
 
   return { run };
 }

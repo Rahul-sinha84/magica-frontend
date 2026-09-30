@@ -5,6 +5,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { NO_NUL_MESSAGE, noNul } from "@/contracts";
+import { cancelRun } from "@/lib/cancelRun";
 import { ApiError } from "@/lib/queryClient";
 import { uuid } from "@/lib/uuid";
 import type { Message, SendMessageResponse } from "@/types";
@@ -66,7 +67,18 @@ export function useSendMessage(chatId: string | null) {
       store.forgetFailedSend(key);
       if (response) {
         queryClient.setQueryData<MessagesData>(messagesQueryKey(targetId), (data) => appendMessage(data, response.message));
-        store.setRun(targetId, { runId: response.runId, triggerRunId: response.triggerRunId, startedAt: Date.now() });
+        store.setRun(targetId, {
+          runId: response.runId,
+          triggerRunId: response.triggerRunId,
+          realtimeToken: response.realtimeToken,
+          realtimeTokenExpiresAt: response.realtimeTokenExpiresAt,
+          startedAt: Date.now(),
+        });
+        // Stop was pressed while this was on its way
+        if (useChatStore.getState().stopRequested[targetId]) {
+          useChatStore.getState().clearStopRequest(targetId);
+          await cancelRun(api, response.runId).catch((error: Error) => toast.error("Couldn't stop the response", { description: error.message }));
+        }
       }
       // the server's copy is in the list now (seeded above, or found by the refetch), so the pending one can go
       store.removeOptimistic(targetId, clientMessageId);
@@ -84,6 +96,7 @@ export function useSendMessage(chatId: string | null) {
       // it did not go: take the message back off the screen and give the text back
       const latest = useChatStore.getState();
       latest.removeOptimistic(targetId, clientMessageId);
+      latest.clearStopRequest(targetId);
       const typedSince = latest.drafts[key] ?? "";
       latest.setDraft(key, typedSince ? `${content}\n${typedSince}` : content);
       latest.rememberFailedSend(key, { content, clientMessageId });

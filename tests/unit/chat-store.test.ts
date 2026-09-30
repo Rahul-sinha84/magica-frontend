@@ -20,8 +20,8 @@ describe("chat store", () => {
   });
 
   it("tracks runs per chat", () => {
-    get().setRun("a", { runId: "r1", triggerRunId: null, startedAt: 1 });
-    get().setRun("b", { runId: "r2", triggerRunId: null, startedAt: 1 });
+    get().setRun("a", { runId: "r1", triggerRunId: null, realtimeToken: null, realtimeTokenExpiresAt: null, startedAt: 1 });
+    get().setRun("b", { runId: "r2", triggerRunId: null, realtimeToken: null, realtimeTokenExpiresAt: null, startedAt: 1 });
     get().clearRun("a");
     expect(Object.keys(get().runs)).toEqual(["b"]);
   });

@@ -2,7 +2,7 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ApiError } from "@/lib/queryClient";
+import { cancelRun } from "@/lib/cancelRun";
 import { useChatStore } from "@/stores/chatStore";
 import { activeRunQueryKey } from "./useRunWatcher";
 import { useApi } from "./useApi";
@@ -16,14 +16,11 @@ export function useStopRun(chatId: string) {
 
   return useMutation({
     mutationFn: async () => {
-      const run = useChatStore.getState().runs[chatId];
-      if (!run) return;
-      try {
-        await api.runs.cancel(run.runId);
-      } catch (error) {
-        const refused = error instanceof ApiError && error.status >= 400 && error.status < 500 && error.status !== 401;
-        if (!refused) throw error;
-      }
+      const store = useChatStore.getState();
+      const run = store.runs[chatId];
+      if (run) return cancelRun(api, run.runId);
+      // the message is still on its way, so there is no run to cancel yet: cancel it as soon as there is
+      if ((store.optimistic[chatId] ?? []).length > 0) store.requestStop(chatId);
     },
     onError: (error) => toast.error("Couldn't stop the response", { description: error.message }),
     onSettled: () => queryClient.invalidateQueries({ queryKey: activeRunQueryKey(chatId) }),

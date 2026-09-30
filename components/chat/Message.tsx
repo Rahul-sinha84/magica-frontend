@@ -36,7 +36,7 @@ function AssistantMessage({ message }: { message: MessageData }) {
       {status === "FAILED" && (
         <p role="alert" className="mt-4 flex items-center gap-1.5 text-sm text-destructive">
           <AlertCircle className="size-4" aria-hidden="true" />
-          Something went wrong while writing this response.
+          {message.errorMessage || "Something went wrong while writing this response."}
         </p>
       )}
       {status === "CANCELLED" && (

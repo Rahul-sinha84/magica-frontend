@@ -153,6 +153,25 @@ describe("message", () => {
     expect(screen.getByText(/stopped/i)).toBeInTheDocument();
   });
 
+  it("shows the reason a reply failed", () => {
+    render(<Message message={message({ status: "FAILED", content: "partial", errorMessage: "The model ran out of credits." })} pending={false} />);
+    expect(screen.getByRole("alert")).toHaveTextContent("The model ran out of credits.");
+    expect(screen.queryByText("Something went wrong while writing this response.")).not.toBeInTheDocument();
+  });
+
+  it("falls back to the general wording when there is no reason", () => {
+    for (const errorMessage of [null, undefined, ""]) {
+      const { unmount } = render(<Message message={message({ status: "FAILED", errorMessage })} pending={false} />);
+      expect(screen.getByRole("alert")).toHaveTextContent("Something went wrong while writing this response.");
+      unmount();
+    }
+  });
+
+  it("only shows a reason on a failed reply", () => {
+    render(<Message message={message({ status: "COMPLETED", content: "fine", errorMessage: "stale reason" })} pending={false} />);
+    expect(screen.queryByText("stale reason")).not.toBeInTheDocument();
+  });
+
   it("copies a reply's text", async () => {
     const user = userEvent.setup();
     render(<Message message={message({ contentBlocks: [{ type: "text", content: "copy me" }] })} pending={false} />);

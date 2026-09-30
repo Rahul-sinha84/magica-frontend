@@ -15,6 +15,9 @@ export interface OptimisticMessage {
 export interface RunInFlight {
   runId: string;
   triggerRunId: string | null;
+  // for the live stream (Phase 5); null when the server didn't give one
+  realtimeToken: string | null;
+  realtimeTokenExpiresAt: string | null;
   // when we learned of it, so an older active-run answer can't be mistaken for "it finished"
   startedAt: number;
 }
@@ -41,6 +44,12 @@ interface ChatStore {
   failedSends: Record<string, { content: string; clientMessageId: string }>;
   rememberFailedSend: (key: string, send: { content: string; clientMessageId: string }) => void;
   forgetFailedSend: (key: string) => void;
+
+  // Stop was pressed before the server said which run it is (the send is still in flight). The run is
+  // cancelled the moment it is known.
+  stopRequested: Record<string, true>;
+  requestStop: (chatId: string) => void;
+  clearStopRequest: (chatId: string) => void;
 
   runs: Record<string, RunInFlight>;
   setRun: (chatId: string, run: RunInFlight) => void;
@@ -74,6 +83,10 @@ export const useChatStore = create<ChatStore>((set) => ({
   failedSends: {},
   rememberFailedSend: (key, send) => set((s) => ({ failedSends: { ...s.failedSends, [key]: send } })),
   forgetFailedSend: (key) => set((s) => ({ failedSends: without(s.failedSends, key) })),
+
+  stopRequested: {},
+  requestStop: (chatId) => set((s) => ({ stopRequested: { ...s.stopRequested, [chatId]: true } })),
+  clearStopRequest: (chatId) => set((s) => ({ stopRequested: without(s.stopRequested, chatId) })),
 
   runs: {},
   setRun: (chatId, run) => set((s) => ({ runs: { ...s.runs, [chatId]: run } })),
