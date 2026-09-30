@@ -179,3 +179,10 @@ describe("message", () => {
     expect(await navigator.clipboard.readText()).toBe("copy me");
   });
 });
+
+describe("an empty reply", () => {
+  it("says there was no response instead of showing only buttons", () => {
+    render(<Message message={message({ status: "COMPLETED", content: "", contentBlocks: [] })} pending={false} />);
+    expect(screen.getByText("No response.")).toBeInTheDocument();
+  });
+});

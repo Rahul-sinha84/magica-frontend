@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, type ReactNode } from "react";
+import { useChatStore } from "@/stores/chatStore";
 import { useUiStore } from "@/stores/uiStore";
 import { ArtifactPanel } from "@/components/chat/ArtifactPanel";
 import { Sidebar } from "./Sidebar";
@@ -11,6 +12,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   // (private mode, "block all site data") zustand leaves `persist` undefined, so guard it.
   useEffect(() => {
     useUiStore.persist?.rehydrate();
+    useChatStore.persist?.rehydrate();
   }, []);
 
   return (

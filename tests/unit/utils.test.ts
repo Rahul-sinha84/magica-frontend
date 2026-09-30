@@ -140,3 +140,14 @@ describe("assetRatio", () => {
     expect(assetRatio(-4, 2, 1)).toBe(1);
   });
 });
+
+describe("formatMessageTime", () => {
+  it("gives the time for today, the date before that, and the year once it isn't this year", async () => {
+    const { formatMessageTime } = await import("@/lib/utils");
+    const now = new Date(2026, 9, 1, 15, 0);
+    expect(formatMessageTime(new Date(2026, 9, 1, 14, 42).toISOString(), now)).toBe("2:42 PM");
+    expect(formatMessageTime(new Date(2026, 8, 30, 23, 15).toISOString(), now)).toBe("Sep 30");
+    expect(formatMessageTime(new Date(2025, 11, 31, 9, 0).toISOString(), now)).toBe("Dec 31, 2025");
+    expect(formatMessageTime("nonsense", now)).toBe("");
+  });
+});

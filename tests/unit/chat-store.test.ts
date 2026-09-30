@@ -40,3 +40,18 @@ describe("chat store", () => {
     expect(get().artifactPanel.isOpen).toBe(false);
   });
 });
+
+describe("drafts across a reload", () => {
+  it("keeps only the drafts, in this tab's session storage", () => {
+    get().setDraft("c1", "half a thought");
+    get().setRun("c1", { runId: "r", triggerRunId: null, realtimeToken: "secret", realtimeTokenExpiresAt: null, startedAt: 1 });
+    const saved = JSON.parse(sessionStorage.getItem("magica-drafts") ?? "{}");
+    expect(saved.state).toEqual({ drafts: { c1: "half a thought" } });
+  });
+
+  it("reads them back", async () => {
+    sessionStorage.setItem("magica-drafts", JSON.stringify({ state: { drafts: { c2: "restored" } }, version: 0 }));
+    await useChatStore.persist.rehydrate();
+    expect(get().drafts.c2).toBe("restored");
+  });
+});

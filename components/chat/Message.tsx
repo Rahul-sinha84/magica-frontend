@@ -2,7 +2,7 @@
 
 import { memo } from "react";
 import { AlertCircle, CircleSlash } from "lucide-react";
-import { formatClockTime } from "@/lib/utils";
+import { formatMessageTime } from "@/lib/utils";
 import type { Message as MessageData } from "@/types";
 import { CopyButton, MessageActions } from "./MessageActions";
 import { MessageContent } from "./MessageContent";
@@ -17,7 +17,7 @@ function UserMessage({ message, pending }: { message: MessageData; pending: bool
         <div className="mt-1 flex items-center gap-1.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100">
           {message.content && <CopyButton text={message.content} />}
           <time dateTime={message.createdAt} className="text-xs font-medium text-text-secondary">
-            {formatClockTime(message.createdAt)}
+            {formatMessageTime(message.createdAt)}
           </time>
         </div>
       )}
@@ -33,6 +33,10 @@ function AssistantMessage({ message }: { message: MessageData }) {
   return (
     <div>
       <MessageContent blocks={blocks} chatId={message.chatId} createdAt={message.createdAt} />
+      {status === "COMPLETED" && blocks.every((block) => block.type === "usage") && (
+        // a finished reply with nothing in it: say so, rather than show a lone row of buttons
+        <p className="text-sm text-text-secondary">No response.</p>
+      )}
       {status === "FAILED" && (
         <p role="alert" className="mt-4 flex items-center gap-1.5 text-sm text-destructive">
           <AlertCircle className="size-4" aria-hidden="true" />

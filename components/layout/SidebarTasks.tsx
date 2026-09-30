@@ -37,9 +37,18 @@ export function SidebarTasks() {
 
   return (
     <section aria-label="Recent tasks">
-      <h2 className="flex min-h-8 items-center px-2 py-1 text-xs font-normal text-text-secondary">
-        Recent tasks
-      </h2>
+      <div className="group/tasks-header flex min-h-8 items-center justify-between px-2 py-1">
+        <h2 className="text-xs font-normal text-text-secondary">Recent tasks</h2>
+        {/* magica's link to the full task list shows on hover; that page isn't in this build */}
+        <button
+          type="button"
+          title="Not available in this build"
+          aria-disabled="true"
+          className="rounded px-1 text-[10px] text-text-secondary opacity-0 outline-none transition-opacity focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring group-hover/tasks-header:opacity-100 [@media(hover:none)]:opacity-100"
+        >
+          View all
+        </button>
+      </div>
       <ul className="mt-0.5 space-y-0.5">
         {chats.map((chat) => (
           <li key={chat.id} className="[contain-intrinsic-size:auto_36px] [content-visibility:auto]">

@@ -138,7 +138,7 @@ export function MessageList({ messages, pending, stream, hasOlder, isLoadingOlde
         aria-relevant="additions"
         aria-label="Conversation"
         tabIndex={0}
-        className="size-full overflow-y-auto outline-none"
+        className="size-full overflow-y-auto outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
       >
         <div className="relative w-full" style={{ height: totalSize }}>
           {virtualizer.getVirtualItems().map((row) => {

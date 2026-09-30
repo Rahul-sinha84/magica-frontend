@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Check, Coins, Copy, GitFork, ThumbsDown, ThumbsUp } from "lucide-react";
 import { toast } from "sonner";
 import { copyText, creditsUsed } from "@/lib/blocks";
-import { cn, formatClockTime, formatCredits } from "@/lib/utils";
+import { cn, formatMessageTime, formatCredits } from "@/lib/utils";
 import type { Message } from "@/types";
 
 const button =
@@ -62,7 +62,7 @@ export function MessageActions({ message }: { message: Message }) {
           </button>
         </div>
         <time dateTime={message.createdAt} className="ml-4 text-xs font-medium">
-          {formatClockTime(message.createdAt)}
+          {formatMessageTime(message.createdAt)}
         </time>
       </div>
     </div>

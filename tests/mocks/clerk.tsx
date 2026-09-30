@@ -5,12 +5,13 @@ import { vi } from "vitest";
 export const clerkState = {
   isLoaded: true,
   isSignedIn: true,
+  userId: "user_mock" as string | null,
   signOut: vi.fn(),
   userButtonProps: undefined as undefined | { appearance?: { elements?: Record<string, string> } },
 };
 
 export function resetClerk() {
-  Object.assign(clerkState, { isLoaded: true, isSignedIn: true });
+  Object.assign(clerkState, { isLoaded: true, isSignedIn: true, userId: "user_mock" });
   clerkState.signOut.mockReset();
 }
 
@@ -18,6 +19,7 @@ export const clerkModule = {
   useAuth: () => ({
     isLoaded: clerkState.isLoaded,
     isSignedIn: clerkState.isSignedIn,
+    userId: clerkState.isSignedIn ? clerkState.userId : null,
     getToken: async () => "test-token",
   }),
   useClerk: () => ({ signOut: clerkState.signOut }),

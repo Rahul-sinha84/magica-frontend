@@ -22,8 +22,7 @@ export function SidebarFooter({ rail }: { rail: boolean }) {
             <button
               type="button"
               aria-label="Settings"
-              title={INERT}
-            aria-disabled="true"
+              title={INERT} aria-disabled="true"
               className="flex size-8 items-center justify-center rounded-lg text-icon-primary outline-none hover:bg-surface-secondary focus-visible:ring-2 focus-visible:ring-ring"
             >
               <Settings className="size-4" />
@@ -36,7 +35,8 @@ export function SidebarFooter({ rail }: { rail: boolean }) {
   }
 
   return (
-    <div className="flex flex-col px-2 pb-1">
+    // a line above the footer, like magica's, so the task list scrolls away under it
+    <div className="flex flex-col border-t border-line-tertiary px-2 pb-1 pt-2">
       <button
         type="button"
         aria-expanded={expanded}
@@ -54,27 +54,23 @@ export function SidebarFooter({ rail }: { rail: boolean }) {
           </div>
           <button
             type="button"
-            title={INERT}
-            aria-disabled="true"
+            title={INERT} aria-disabled="true"
             className="mt-2 flex h-8 items-center justify-center gap-[7px] rounded-lg bg-gradient-to-b from-[#3b3b3b] to-[#2b2b2b] px-4 text-xs font-medium text-[#f7f7f7] shadow-[0_0_0_1px_#303030,inset_0_1px_0_rgba(255,255,255,0.15)] outline-none hover:from-[#343434] hover:to-[#252525] focus-visible:ring-2 focus-visible:ring-ring"
           >
             <Wallet className="size-4" />
             Add Credits
           </button>
           <div className="mt-3 grid grid-cols-2 gap-2">
-            <button type="button" title={INERT}
-            aria-disabled="true" className={`${outlined} h-7 justify-center gap-1.5 px-3`}>
+            <button type="button" title={INERT} aria-disabled="true" className={`${outlined} h-7 justify-center gap-1.5 px-3`}>
               <Settings className="size-4" />
               Settings
             </button>
-            <button type="button" title={INERT}
-            aria-disabled="true" className={`${outlined} h-7 justify-center gap-1.5 px-3`}>
+            <button type="button" title={INERT} aria-disabled="true" className={`${outlined} h-7 justify-center gap-1.5 px-3`}>
               <Sparkles className="size-4" />
               Updates
             </button>
           </div>
-          <button type="button" title={INERT}
-            aria-disabled="true" className={`${outlined} mt-2 h-[34px] gap-2.5 px-2`}>
+          <button type="button" title={INERT} aria-disabled="true" className={`${outlined} mt-2 h-[34px] gap-2.5 px-2`}>
             <Users className="size-4" />
             <span className="flex-1 text-left">Invite team members</span>
             <ArrowRight className="size-3.5" />
@@ -85,7 +81,7 @@ export function SidebarFooter({ rail }: { rail: boolean }) {
       <div className="mt-3">
         <ThemeToggle />
       </div>
-      <div className="mt-1.5">
+      <div className="mt-1.5 pb-1 pt-0.5">
         <UserBadge />
       </div>
     </div>

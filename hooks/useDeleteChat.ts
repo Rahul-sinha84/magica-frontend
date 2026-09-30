@@ -25,6 +25,7 @@ export function useDeleteChat() {
     queryClient.removeQueries({ queryKey: ["messages", chatId] });
     // a run it had in flight is over with it (the backend cancels it), so nothing waits for it
     useChatStore.getState().clearRun(chatId);
+    useChatStore.getState().setDraft(chatId, "");
     if (params.chatId === chatId) router.replace("/chat");
   }
 

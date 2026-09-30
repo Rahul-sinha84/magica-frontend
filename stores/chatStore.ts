@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { createJSONStorage, persist } from "zustand/middleware";
 import type { ImageBlock, VideoBlock } from "@/types";
 
 // The composer draft for the home screen, where there is no chat yet.
@@ -85,19 +86,48 @@ const without = <T,>(record: Record<string, T>, key: string) =>
 
 const CLOSED_PANEL: ArtifactPanel = { isOpen: false, artifact: null };
 
-export const useChatStore = create<ChatStore>((set) => ({
-  drafts: {},
-  // an empty draft is removed rather than kept, so the map doesn't grow with every visited chat
-  setDraft: (key, text) =>
-    set((s) => ({ drafts: text ? { ...s.drafts, [key]: text } : without(s.drafts, key) })),
+export const DRAFTS_KEY = "magica-drafts";
 
-  optimistic: {},
-  addOptimistic: (message) =>
-    set((s) => ({ optimistic: { ...s.optimistic, [message.chatId]: [...(s.optimistic[message.chatId] ?? []), message] } })),
-  removeOptimistic: (chatId, clientMessageId) =>
-    set((s) => {
-      const remaining = (s.optimistic[chatId] ?? []).filter((m) => m.clientMessageId !== clientMessageId);
-      return { optimistic: remaining.length ? { ...s.optimistic, [chatId]: remaining } : without(s.optimistic, chatId) };
+// Session storage that never throws: blocked storage (private windows, "block all site data") or a full
+// quota must not break typing. Drafts then simply aren't kept across a reload.
+const safeSessionStorage = {
+  getItem: (name: string) => {
+    try {
+      return sessionStorage.getItem(name);
+    } catch {
+      return null;
+    }
+  },
+  setItem: (name: string, value: string) => {
+    try {
+      sessionStorage.setItem(name, value);
+    } catch {}
+  },
+  removeItem: (name: string) => {
+    try {
+      sessionStorage.removeItem(name);
+    } catch {}
+  },
+};
+
+// Only the unsent drafts are kept, in this tab's session storage, so a reload doesn't lose what you were
+// typing. Everything else (runs, pending messages) comes back from the server. Like the ui store, it is
+// read back after the first render (see AppShell), so the server's render and the first client one match.
+export const useChatStore = create<ChatStore>()(
+  persist(
+    (set) => ({
+      drafts: {},
+      // an empty draft is removed rather than kept, so the map doesn't grow with every visited chat
+      setDraft: (key, text) =>
+        set((s) => ({ drafts: text ? { ...s.drafts, [key]: text } : without(s.drafts, key) })),
+
+      optimistic: {},
+      addOptimistic: (message) =>
+        set((s) => ({ optimistic: { ...s.optimistic, [message.chatId]: [...(s.optimistic[message.chatId] ?? []), message] } })),
+      removeOptimistic: (chatId, clientMessageId) =>
+        set((s) => {
+          const remaining = (s.optimistic[chatId] ?? []).filter((m) => m.clientMessageId !== clientMessageId);
+          return { optimistic: remaining.length ? { ...s.optimistic, [chatId]: remaining } : without(s.optimistic, chatId) };
     }),
 
   failedSends: {},
@@ -130,4 +160,12 @@ export const useChatStore = create<ChatStore>((set) => ({
       return { shownArtifacts: { ...s.shownArtifacts, [key]: true }, ...(wide && { artifactPanel: { isOpen: true, artifact } }) };
     }),
   closeArtifactPanel: () => set({ artifactPanel: CLOSED_PANEL }),
-}));
+    }),
+    {
+      name: DRAFTS_KEY,
+      storage: createJSONStorage(() => safeSessionStorage),
+      partialize: (s) => ({ drafts: s.drafts }),
+      skipHydration: true,
+    },
+  ),
+);

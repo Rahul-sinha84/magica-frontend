@@ -148,10 +148,23 @@ export function MessageContent({
   const origin = { chatId, createdAt };
   const segments = groupBlocks(blocks).filter((segment) => segment.kind === "steps" || segment.block.type !== "usage");
   return (
-    <div className="space-y-4">
-      {segments.map((segment, i) =>
-        segment.kind === "steps" ? <StepGroup key={`steps-${segment.calls[0].toolCallId}`} calls={segment.calls} results={segment.results} /> : <BlockView key={i} block={segment.block} thinkingActive={thinkingActive} origin={origin} />,
-      )}
+    <div>
+      {segments.map((segment, i) => {
+        // as on magica: a "Completed N steps" or "Thought for" row sits 4px above what follows it, and
+        // everything else is 16px apart
+        const previous = segments[i - 1];
+        const header = previous && (previous.kind === "steps" || previous.block.type === "thinking");
+        const gap = i === 0 ? undefined : header ? "mt-1" : "mt-4";
+        return segment.kind === "steps" ? (
+          <div key={`steps-${segment.calls[0].toolCallId}`} className={gap}>
+            <StepGroup calls={segment.calls} results={segment.results} />
+          </div>
+        ) : (
+          <div key={i} className={gap}>
+            <BlockView block={segment.block} thinkingActive={thinkingActive} origin={origin} />
+          </div>
+        );
+      })}
     </div>
   );
 }

@@ -51,6 +51,15 @@ export function formatCredits(value: number) {
 }
 
 // "2:42 PM", in the viewer's timezone
+// Under a message, as magica writes it: the time for today ("2:42 PM"), the date before that ("Sep 30"),
+// and the year too once it isn't this year ("Sep 30, 2025").
+export function formatMessageTime(iso: string, now = new Date()) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  if (date.toDateString() === now.toDateString()) return format(date, "h:mm a");
+  return format(date, date.getFullYear() === now.getFullYear() ? "MMM d" : "MMM d, yyyy");
+}
+
 export function formatClockTime(iso: string) {
   const date = new Date(iso);
   return Number.isNaN(date.getTime()) ? "" : format(date, "h:mm a");

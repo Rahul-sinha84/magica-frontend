@@ -52,6 +52,7 @@ afterEach(() => {
   realtime.reset();
   useChatStore.setState(useChatStore.getInitialState(), true);
   localStorage.clear();
+  sessionStorage.clear();
   setViewport(true);
 });
 afterAll(() => server.close());

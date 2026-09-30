@@ -51,17 +51,18 @@ export function SidebarChatItem({ chat, active, onDelete }: Props) {
             <Ellipsis className="size-4" />
           </button>
         </DropdownMenuTrigger>
+        {/* the items this build can't do yet look like magica's (not faded), but can't be chosen */}
         <DropdownMenuContent side="right" align="start" className="w-48">
-          <DropdownMenuItem disabled>
+          <DropdownMenuItem disabled title="Not available in this build" className="data-disabled:opacity-100">
             <Pin /> Pin to top
           </DropdownMenuItem>
-          <DropdownMenuItem disabled>
+          <DropdownMenuItem disabled title="Not available in this build" className="data-disabled:opacity-100">
             <Pencil /> Rename
           </DropdownMenuItem>
-          <DropdownMenuItem disabled>
+          <DropdownMenuItem disabled title="Not available in this build" className="data-disabled:opacity-100">
             <Copy /> Duplicate
           </DropdownMenuItem>
-          <DropdownMenuItem disabled>
+          <DropdownMenuItem disabled title="Not available in this build" className="data-disabled:opacity-100">
             <FolderPlus /> Add to project <ChevronRight className="ml-auto" />
           </DropdownMenuItem>
           <DropdownMenuItem variant="destructive" onSelect={() => onDelete(chat)}>
