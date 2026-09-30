@@ -85,3 +85,18 @@ export const getMockDb = () => db;
 export const resetMockDb = () => {
   db = createMockDb();
 };
+
+// A 240-message task, for trying out long histories and scrolling up in the browser mock. Not part of
+// the default data, so lists in tests stay small.
+export function addLongChat(target: MockDb = db) {
+  const id = "chat-long";
+  const messages: Message[] = [];
+  for (let i = 0; i < 120; i++) {
+    const at = minutesAgo(300 - i * 2);
+    messages.push(message(`m-long-${i}-u`, id, "USER", `Question number ${i + 1}: ${"tell me more ".repeat(1 + (i % 5))}`, [], at));
+    const reply = `Answer number ${i + 1}. ${"This is a longer line of the reply. ".repeat(1 + (i % 7))}`;
+    messages.push(message(`m-long-${i}-a`, id, "ASSISTANT", reply, [{ type: "text", content: reply }], at));
+  }
+  target.chats.unshift(chat(id, "A very long conversation", 0));
+  target.messages[id] = messages;
+}

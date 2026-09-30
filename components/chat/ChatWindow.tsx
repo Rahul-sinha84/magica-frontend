@@ -1,18 +1,38 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Composer } from "@/components/composer/Composer";
 import { useChat } from "@/hooks/useChat";
+import { useMessages } from "@/hooks/useMessages";
+import { useRunWatcher } from "@/hooks/useRunWatcher";
+import { useSendMessage } from "@/hooks/useSendMessage";
+import { useStopRun } from "@/hooks/useStopRun";
+import { useChatStore } from "@/stores/chatStore";
 import { chatTitle } from "@/lib/utils";
 import { ApiError } from "@/lib/queryClient";
 import { ChatHeader } from "./ChatHeader";
+import { MessageList } from "./MessageList";
 
-// Phase 3 shell: header, an empty conversation area and the composer. Messages arrive in phase 4.
+const NO_PENDING: never[] = [];
+
+// One task: its history, the composer, and the reply being waited for.
 export function ChatWindow({ chatId }: { chatId: string }) {
   const { data: chat, error } = useChat(chatId);
-  const [text, setText] = useState("");
+  const { messages, isLoading, hasNextPage, isFetchingNextPage, fetchNextPage } = useMessages(chatId);
+  const text = useChatStore((state) => state.drafts[chatId] ?? "");
+  const setDraft = useChatStore((state) => state.setDraft);
+  const optimistic = useChatStore((state) => state.optimistic[chatId] ?? NO_PENDING);
+  const running = useChatStore((state) => !!state.runs[chatId]);
+  const { send, isSending } = useSendMessage(chatId);
+  const stop = useStopRun(chatId);
+  useRunWatcher(chatId);
+  // our own messages stay on screen until the server's copy (same clientMessageId) is in the list
+  const pending = useMemo(() => {
+    const confirmed = new Set(messages.map((m) => m.clientMessageId).filter(Boolean));
+    return optimistic.filter((p) => !confirmed.has(p.clientMessageId));
+  }, [messages, optimistic]);
   // only the server saying "not found" counts; a failed request shouldn't claim the task is gone
   const missing = error instanceof ApiError && error.status === 404;
 
@@ -38,9 +58,28 @@ export function ChatWindow({ chatId }: { chatId: string }) {
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
       <ChatHeader showFiles />
-      <div className="min-h-0 flex-1" />
+      {isLoading && messages.length === 0 ? (
+        <div className="min-h-0 flex-1" aria-busy="true" />
+      ) : (
+        <MessageList
+          messages={messages}
+          pending={pending}
+          thinking={running}
+          hasOlder={!!hasNextPage}
+          isLoadingOlder={isFetchingNextPage}
+          onLoadOlder={() => void fetchNextPage()}
+        />
+      )}
       <div className="flex justify-center px-4 pb-2 pt-2">
-        <Composer value={text} onChange={setText} placeholder="Send a message…" />
+        <Composer
+          value={text}
+          onChange={(value) => setDraft(chatId, value)}
+          placeholder="Send a message…"
+          onSubmit={() => send(text)}
+          onStop={() => stop.mutate()}
+          running={running}
+          sending={isSending}
+        />
       </div>
     </div>
   );

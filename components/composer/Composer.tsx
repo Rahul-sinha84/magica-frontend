@@ -1,10 +1,11 @@
 "use client";
 
-import { ArrowUp, Mic, Paperclip } from "lucide-react";
+import { Mic, Paperclip } from "lucide-react";
 import { PlugIcon } from "@/components/icons";
 import { MAX_MESSAGE_LENGTH } from "@/lib/limits";
 import { cn } from "@/lib/utils";
 import { ComposerTextarea } from "./ComposerTextarea";
+import { SendButton } from "./SendButton";
 
 interface Props {
   value: string;
@@ -12,6 +13,11 @@ interface Props {
   placeholder: string;
   // without this the composer is display-only
   onSubmit?: () => void;
+  onStop?: () => void;
+  // a reply is being written: sending waits, and the button offers Stop
+  running?: boolean;
+  // the message is on its way to the server
+  sending?: boolean;
   autoFocus?: boolean;
 }
 
@@ -19,9 +25,9 @@ const INERT = "Not available in this build";
 const action =
   "flex shrink-0 items-center justify-center rounded-full text-icon-secondary outline-none hover:bg-surface-secondary focus-visible:ring-2 focus-visible:ring-ring";
 
-export function Composer({ value, onChange, placeholder, onSubmit, autoFocus }: Props) {
+export function Composer({ value, onChange, placeholder, onSubmit, onStop, running = false, sending = false, autoFocus }: Props) {
   const tooLong = value.length > MAX_MESSAGE_LENGTH;
-  const canSend = !!onSubmit && value.trim().length > 0 && !tooLong;
+  const canSend = !!onSubmit && value.trim().length > 0 && !tooLong && !running && !sending;
 
   return (
     <div className="flex min-h-[132px] w-full max-w-[900px] flex-col gap-3 rounded-3xl bg-gradient-to-b from-surface-primary to-surface-main px-4 pb-3 pt-4 shadow-[0_0_0_1px_var(--line-tertiary)]">
@@ -52,19 +58,7 @@ export function Composer({ value, onChange, placeholder, onSubmit, autoFocus }: 
           <button type="button" aria-label="Dictation" title={INERT} aria-disabled="true" className={cn(action, "size-[34px]")}>
             <Mic className="size-4" />
           </button>
-          <button
-            type="button"
-            aria-label="Send message"
-            disabled={!canSend}
-            onClick={onSubmit}
-            className={cn(
-              action,
-              "size-8 bg-surface-main-2 disabled:cursor-not-allowed disabled:text-text-disabled disabled:hover:bg-surface-main-2",
-              canSend && "bg-primary text-primary-foreground hover:bg-primary/85",
-            )}
-          >
-            <ArrowUp className="size-4" />
-          </button>
+          <SendButton running={running} sending={sending} canSend={canSend} onSend={() => onSubmit?.()} onStop={() => onStop?.()} />
         </div>
       </div>
     </div>

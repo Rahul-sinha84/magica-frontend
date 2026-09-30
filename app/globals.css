@@ -128,3 +128,24 @@
     @apply bg-background text-foreground text-sm antialiased;
   }
 }
+
+/* "Thinking" text with a light sweeping across it */
+.thinking-shimmer {
+  background: linear-gradient(90deg, var(--text-secondary) 35%, var(--text-primary) 50%, var(--text-secondary) 65%) 0 0 / 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: thinking-shimmer 1.8s linear infinite;
+}
+@keyframes thinking-shimmer {
+  to {
+    background-position: -150% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .thinking-shimmer {
+    animation: none;
+    background: none;
+    color: var(--text-secondary);
+  }
+}

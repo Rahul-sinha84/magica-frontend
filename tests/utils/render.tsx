@@ -1,7 +1,8 @@
 import type { ReactElement } from "react";
 import type { QueryClient } from "@tanstack/react-query";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { render } from "@testing-library/react";
+import { render, waitFor } from "@testing-library/react";
+import { expect } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { ThemeProvider } from "next-themes";
 import { Toaster } from "@/components/ui/sonner";
@@ -32,4 +33,12 @@ export function renderApp(ui: ReactElement, { prepare }: { prepare?: (client: Qu
     user: userEvent.setup(),
     rerender: (next: ReactElement) => result.rerender(wrap(next)),
   };
+}
+
+// Types text, waits until the box really holds it, then presses Enter. Pressing Enter while React
+// is still catching up with the last keystroke would add a new line instead of sending.
+export async function typeAndSend(user: ReturnType<typeof userEvent.setup>, box: HTMLElement, text: string) {
+  await user.type(box, text);
+  await waitFor(() => expect(box).toHaveValue(text));
+  await user.keyboard("{Enter}");
 }

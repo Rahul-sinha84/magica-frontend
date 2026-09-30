@@ -1,14 +1,17 @@
 "use client";
 
-import { useState } from "react";
 import Image from "next/image";
 import { format } from "date-fns";
 import { Composer } from "@/components/composer/Composer";
 import { useClock } from "@/hooks/useClock";
+import { useSendMessage } from "@/hooks/useSendMessage";
+import { NEW_CHAT, useChatStore } from "@/stores/chatStore";
 import { ChatHeader } from "./ChatHeader";
 
 export function HomeScreen() {
-  const [text, setText] = useState("");
+  const text = useChatStore((state) => state.drafts[NEW_CHAT] ?? "");
+  const setDraft = useChatStore((state) => state.setDraft);
+  const { send, isSending } = useSendMessage(null);
   const now = useClock();
 
   return (
@@ -30,7 +33,14 @@ export function HomeScreen() {
             <h1 className="mt-1 text-2xl font-bold text-text-primary">Your AI worker</h1>
             <p className="mt-2 text-sm font-medium leading-6 text-text-secondary">Work at the speed of thought.</p>
           </div>
-          <Composer value={text} onChange={setText} placeholder="Assign a task or ask anything…" autoFocus />
+          <Composer
+            value={text}
+            onChange={(value) => setDraft(NEW_CHAT, value)}
+            placeholder="Assign a task or ask anything…"
+            onSubmit={() => send(text)}
+            sending={isSending}
+            autoFocus
+          />
         </div>
       </div>
     </div>

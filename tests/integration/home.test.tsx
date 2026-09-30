@@ -40,14 +40,15 @@ describe("home screen", () => {
   it("lets you type, including several lines", async () => {
     const { user } = renderApp(<HomeScreen />);
     const box = screen.getByRole("textbox");
-    await user.type(box, "first{Enter}second");
+    await user.type(box, "first{Shift>}{Enter}{/Shift}second");
     expect(box).toHaveValue("first\nsecond");
   });
 
-  it("can't send yet, even with text", async () => {
+  it("can send once there is text, and not before", async () => {
     const { user } = renderApp(<HomeScreen />);
-    await user.type(screen.getByRole("textbox"), "hello");
     expect(screen.getByRole("button", { name: "Send message" })).toBeDisabled();
+    await user.type(screen.getByRole("textbox"), "hello");
+    expect(screen.getByRole("button", { name: "Send message" })).toBeEnabled();
   });
 
   it("shows the balance in the header and no files button", async () => {

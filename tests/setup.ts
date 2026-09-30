@@ -6,6 +6,7 @@ import { resetClerk } from "./mocks/clerk";
 import { resetMockDb } from "./mocks/fixtures";
 import { resetNavigation } from "./mocks/navigation";
 import { server } from "./mocks/server";
+import { useChatStore } from "@/stores/chatStore";
 
 vi.mock("@clerk/nextjs", async () => (await import("./mocks/clerk")).clerkModule);
 vi.mock("next/navigation", async () => (await import("./mocks/navigation")).navigationModule);
@@ -46,6 +47,7 @@ afterEach(() => {
   resetMockDb();
   resetClerk();
   resetNavigation();
+  useChatStore.setState(useChatStore.getInitialState(), true);
   localStorage.clear();
   setViewport(true);
 });
