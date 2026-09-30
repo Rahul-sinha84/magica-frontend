@@ -16,9 +16,24 @@ import { getMockDb, MOCK_USER_ID } from "./fixtures";
 export const RUN_MS = 4000;
 export const MOCK_REPLY = "Sure! This answer comes from the mock backend, so you can see how a run streams in.";
 
+// A message asking for a picture gets one in the mock, so the side panel can be tried out.
+const wantsImage = (chatId: string) =>
+  /\b(image|picture|draw|photo)\b/i.test([...(getMockDb().messages[chatId] ?? [])].reverse().find((m) => m.role === "USER")?.content ?? "");
+
+const MOCK_IMAGE: ContentBlock = {
+  type: "image",
+  url: "/mock/red-apple.svg",
+  altText: "A red apple",
+  prompt: "A single red apple on a white table, soft light",
+  model: "gpt-image-2.5-flare-text",
+  width: 1024,
+  height: 1024,
+};
+
 // What a mock run has produced after `progress` (0 to 1) of its time: a short think, one step that runs
-// and then finishes, then the reply text growing. The saved reply is the same blocks at 1.
-export function mockRunBlocks(progress: number): ContentBlock[] {
+// and then finishes, then the reply text growing (and, when asked for, a picture near the end). The saved
+// reply is the same blocks at 1.
+export function mockRunBlocks(progress: number, { image = false } = {}): ContentBlock[] {
   const blocks: ContentBlock[] = [];
   if (progress < 0.1) return blocks;
   blocks.push({ type: "thinking", content: "The user wants a quick answer. Keep it short.", ...(progress >= 0.25 && { durationMs: 900 }) });
@@ -28,6 +43,7 @@ export function mockRunBlocks(progress: number): ContentBlock[] {
   if (done) blocks.push({ type: "tool_result", toolCallId: "mock-step", toolName: "skill", result: { ok: true }, isError: false });
   const text = MOCK_REPLY.slice(0, Math.floor(MOCK_REPLY.length * Math.max(0, (progress - 0.5) / 0.5)));
   if (text) blocks.push({ type: "text", content: text });
+  if (image && progress >= 0.8) blocks.push(MOCK_IMAGE);
   return blocks;
 }
 
@@ -66,7 +82,7 @@ function settleRun(chatId: string) {
     chatId,
     role: "ASSISTANT",
     content: MOCK_REPLY,
-    contentBlocks: mockRunBlocks(1),
+    contentBlocks: mockRunBlocks(1, { image: wantsImage(chatId) }),
     status: "COMPLETED",
     createdAt: now,
     agentRunId: run.id,
@@ -198,7 +214,7 @@ export const handlers = [
     }
     // text grows with elapsed time, like a real stream would
     const progress = Math.min(1, (Date.now() - Date.parse(run.startedAt)) / RUN_MS);
-    const partialBlocks = mockRunBlocks(progress);
+    const partialBlocks = mockRunBlocks(progress, { image: wantsImage(chatId) });
     const partialText = partialBlocks.map((block) => (block.type === "text" ? block.content : "")).join("") || null;
     return HttpResponse.json({
       run,
@@ -219,7 +235,7 @@ export const handlers = [
     if (run.status !== "RUNNING") return notFound("Active run");
     // like the backend: the run ends at once and whatever was written so far is kept, marked as stopped
     const now = new Date().toISOString();
-    const partial = mockRunBlocks((Date.now() - Date.parse(run.startedAt ?? now)) / RUN_MS);
+    const partial = mockRunBlocks((Date.now() - Date.parse(run.startedAt ?? now)) / RUN_MS, { image: wantsImage(run.chatId) });
     run.status = "CANCELLED";
     run.completedAt = now;
     getMockDb().messages[run.chatId]?.push({

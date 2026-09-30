@@ -13,7 +13,7 @@ beforeEach(() => {
   useMobileSidebar.setState({ open: false });
 });
 
-const sidebar = () => screen.getByRole("complementary", { hidden: true });
+const sidebar = () => screen.getByRole("complementary", { name: "Sidebar", hidden: true });
 
 describe("remembering the sidebar", () => {
   it("restores a collapsed sidebar after the page loads", async () => {

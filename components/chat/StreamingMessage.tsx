@@ -17,7 +17,7 @@ export const StreamingMessage = memo(function StreamingMessage({ stream }: { str
       {(blocks.length === 0 || (phase === "thinking" && !hasThinking)) && <TypingIndicator />}
       {blocks.length > 0 && (
         <div className={blocks.length > 0 && phase === "thinking" && !hasThinking ? "mt-4" : undefined}>
-          <MessageContent blocks={blocks} thinkingActive={phase === "thinking"} />
+          <MessageContent blocks={blocks} thinkingActive={phase === "thinking"} chatId={stream.chatId} />
         </div>
       )}
       {phase === "stopping" && <p className="mt-3 text-sm text-text-secondary">Stopping…</p>}

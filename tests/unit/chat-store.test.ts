@@ -34,8 +34,8 @@ describe("chat store", () => {
   });
 
   it("opens and closes the artifact panel", () => {
-    get().openArtifactPanel("/i.png", "image", "An image");
-    expect(get().artifactPanel).toMatchObject({ isOpen: true, url: "/i.png", type: "image" });
+    get().openArtifactPanel({ chatId: "c1", asset: { type: "image", url: "/i.png" }, createdAt: null, openedBy: "user" });
+    expect(get().artifactPanel).toMatchObject({ isOpen: true, artifact: { chatId: "c1", asset: { url: "/i.png" } } });
     get().closeArtifactPanel();
     expect(get().artifactPanel.isOpen).toBe(false);
   });

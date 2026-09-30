@@ -10,7 +10,7 @@ import { useChatStore } from "@/stores/chatStore";
 import { chatQueryKey } from "./useChat";
 import { chatsQueryKey } from "./useChats";
 import { creditsQueryKey } from "./useCredits";
-import { messagesQueryKey } from "./useMessages";
+import { messagesQueryKey, type MessagesData } from "./useMessages";
 import { useApi } from "./useApi";
 
 export const activeRunQueryKey = (chatId: string) => ["active-run", chatId] as const;
@@ -93,6 +93,14 @@ export function useRunWatcher(chatId: string, { live = false }: { live?: boolean
       if (queryClient.getQueryState(messagesQueryKey(chatId))?.status === "error") {
         retry = setTimeout(finish, RUN_POLL_MS);
         return;
+      }
+      // A picture made at the very end may have been missed between two checks: the saved reply has it.
+      const saved = queryClient.getQueryData<MessagesData>(messagesQueryKey(chatId));
+      const reply = saved?.pages.flatMap((page) => page.messages).find((m) => m.role === "ASSISTANT" && m.agentRunId === ended);
+      for (const block of reply?.status === "COMPLETED" ? reply.contentBlocks : []) {
+        if (block.type === "image" || block.type === "video") {
+          useChatStore.getState().showNewArtifact(ended, { chatId, asset: block, createdAt: reply!.createdAt, openedBy: "stream" });
+        }
       }
       // a new run may have started in the meantime; only end the one this answer was about
       if (useChatStore.getState().runs[chatId]?.runId === ended) clearRun(chatId);

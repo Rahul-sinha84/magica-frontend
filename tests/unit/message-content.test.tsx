@@ -9,7 +9,7 @@ import type { ContentBlock, Message as MessageData, ToolCallBlock } from "@/type
 const call = (id: string, over: Partial<ToolCallBlock> = {}): ToolCallBlock => ({
   type: "tool_call", toolCallId: id, toolName: "skill", toolInput: { name: id }, status: "completed", durationMs: 1700, ...over,
 });
-const view = (blocks: ContentBlock[]) => render(<MessageContent blocks={blocks} />);
+const view = (blocks: ContentBlock[]) => render(<MessageContent blocks={blocks} chatId="c1" />);
 
 describe("message content", () => {
   it("renders text as markdown", () => {
@@ -37,7 +37,7 @@ describe("message content", () => {
     view([{ type: "image", url: "/mock/red-apple.svg", altText: "A red apple", width: 100, height: 50 }]);
     expect(screen.getByRole("img", { name: "A red apple" })).toHaveAttribute("src", "/mock/red-apple.svg");
     await userEvent.setup().click(screen.getByRole("button", { name: "Open A red apple" }));
-    expect(useChatStore.getState().artifactPanel).toMatchObject({ isOpen: true, url: "/mock/red-apple.svg", type: "image" });
+    expect(useChatStore.getState().artifactPanel).toMatchObject({ isOpen: true, artifact: { chatId: "c1", asset: { url: "/mock/red-apple.svg", type: "image" }, openedBy: "user" } });
   });
 
   it("says so when an image fails to load", () => {

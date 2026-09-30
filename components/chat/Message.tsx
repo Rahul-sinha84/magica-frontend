@@ -32,7 +32,7 @@ function AssistantMessage({ message }: { message: MessageData }) {
 
   return (
     <div>
-      <MessageContent blocks={blocks} />
+      <MessageContent blocks={blocks} chatId={message.chatId} createdAt={message.createdAt} />
       {status === "FAILED" && (
         <p role="alert" className="mt-4 flex items-center gap-1.5 text-sm text-destructive">
           <AlertCircle className="size-4" aria-hidden="true" />

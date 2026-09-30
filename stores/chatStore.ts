@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { ImageBlock, VideoBlock } from "@/types";
 
 // The composer draft for the home screen, where there is no chat yet.
 export const NEW_CHAT = "new";
@@ -22,11 +23,20 @@ export interface RunInFlight {
   startedAt: number;
 }
 
+// The generated picture or video shown in the side panel, and the task it belongs to (the panel only
+// stays open while that task is on screen).
+export interface Artifact {
+  chatId: string;
+  asset: ImageBlock | VideoBlock;
+  // when it was made (the message's time), if known
+  createdAt: string | null;
+  // opened by a click (focus moves into the panel) or by a newly generated asset (focus stays put)
+  openedBy: "user" | "stream";
+}
+
 interface ArtifactPanel {
   isOpen: boolean;
-  url: string | null;
-  type: "image" | "video" | null;
-  title: string | null;
+  artifact: Artifact | null;
 }
 
 interface ChatStore {
@@ -62,14 +72,18 @@ interface ChatStore {
   clearRun: (chatId: string) => void;
 
   artifactPanel: ArtifactPanel;
-  openArtifactPanel: (url: string, type: "image" | "video", title?: string) => void;
+  openArtifactPanel: (artifact: Artifact) => void;
+  // a picture or video a run just made opens by itself, once: closing it keeps it closed
+  showNewArtifact: (runId: string, artifact: Artifact) => void;
+  // which run's assets have already opened by themselves, by run id and address
+  shownArtifacts: Record<string, true>;
   closeArtifactPanel: () => void;
 }
 
 const without = <T,>(record: Record<string, T>, key: string) =>
   Object.fromEntries(Object.entries(record).filter(([name]) => name !== key)) as Record<string, T>;
 
-const CLOSED_PANEL: ArtifactPanel = { isOpen: false, url: null, type: null, title: null };
+const CLOSED_PANEL: ArtifactPanel = { isOpen: false, artifact: null };
 
 export const useChatStore = create<ChatStore>((set) => ({
   drafts: {},
@@ -104,6 +118,16 @@ export const useChatStore = create<ChatStore>((set) => ({
   clearStopping: (chatId) => set((s) => ({ stopping: without(s.stopping, chatId) })),
 
   artifactPanel: CLOSED_PANEL,
-  openArtifactPanel: (url, type, title) => set({ artifactPanel: { isOpen: true, url, type, title: title ?? null } }),
+  openArtifactPanel: (artifact) => set({ artifactPanel: { isOpen: true, artifact } }),
+  shownArtifacts: {},
+  showNewArtifact: (runId, artifact) =>
+    set((s) => {
+      const key = `${runId}:${artifact.asset.url}`;
+      if (s.shownArtifacts[key]) return s;
+      // On a phone the panel covers the whole screen, so it doesn't open by itself there (it would cover
+      // the conversation mid-reply); the picture is in the reply, one tap away.
+      const wide = typeof window === "undefined" || !window.matchMedia || window.matchMedia("(min-width: 768px)").matches;
+      return { shownArtifacts: { ...s.shownArtifacts, [key]: true }, ...(wide && { artifactPanel: { isOpen: true, artifact } }) };
+    }),
   closeArtifactPanel: () => set({ artifactPanel: CLOSED_PANEL }),
 }));

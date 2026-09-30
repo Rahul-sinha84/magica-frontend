@@ -105,3 +105,38 @@ describe("availableCredits", () => {
     expect(availableCredits({ balance: 100, held: 250 })).toBe(0);
   });
 });
+
+describe("safeAssetUrl", () => {
+  it("keeps web addresses and paths on this site", async () => {
+    const { safeAssetUrl } = await import("@/lib/utils");
+    expect(safeAssetUrl("https://cdn.example.com/a.png")).toBe("https://cdn.example.com/a.png");
+    expect(safeAssetUrl("/mock/a.svg")).toBe("/mock/a.svg");
+  });
+  it("refuses anything else", async () => {
+    const { safeAssetUrl } = await import("@/lib/utils");
+    for (const bad of ["javascript:alert(1)", "data:text/html,<b>x</b>", "//evil.example/x.png", "not a url", ""]) {
+      expect(safeAssetUrl(bad)).toBeNull();
+    }
+  });
+});
+
+describe("formatPreviewDate", () => {
+  it("writes dates the way magica's preview does", async () => {
+    const { formatPreviewDate } = await import("@/lib/utils");
+    expect(formatPreviewDate(new Date(2026, 8, 30, 12).toISOString())).toBe("30-Sept-2026");
+    expect(formatPreviewDate(new Date(2026, 0, 5, 12).toISOString())).toBe("5-Jan-2026");
+    expect(formatPreviewDate("nonsense")).toBe("");
+  });
+});
+
+describe("assetRatio", () => {
+  it("uses the real shape, within limits, and falls back on nonsense", async () => {
+    const { assetRatio } = await import("@/lib/utils");
+    expect(assetRatio(1024, 512, 1)).toBe(2);
+    expect(assetRatio(100, 10_000, 1)).toBe(0.25);
+    expect(assetRatio(10_000, 100, 1)).toBe(4);
+    expect(assetRatio(undefined, 5, 16 / 9)).toBe(16 / 9);
+    expect(assetRatio(0, 5, 1)).toBe(1);
+    expect(assetRatio(-4, 2, 1)).toBe(1);
+  });
+});

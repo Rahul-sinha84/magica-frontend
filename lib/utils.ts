@@ -68,3 +68,30 @@ const TERMINAL_STATUSES = new Set<RunStatus | AgentStreamMetadata["status"]>([
 export function isTerminalStatus(status: RunStatus | AgentStreamMetadata["status"]) {
   return TERMINAL_STATUSES.has(status);
 }
+
+// A link to a generated file that is safe to put in href/src: web addresses, and paths on this site.
+// Anything else (javascript:, data:, a malformed value) gives null.
+export function safeAssetUrl(url: string): string | null {
+  if (url.startsWith("/") && !url.startsWith("//")) return url;
+  try {
+    const { protocol } = new URL(url);
+    return protocol === "https:" || protocol === "http:" || protocol === "blob:" ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+// "30-Sept-2026", as magica's preview writes dates
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "June", "July", "Aug", "Sept", "Oct", "Nov", "Dec"];
+export function formatPreviewDate(iso: string) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${date.getDate()}-${MONTHS[date.getMonth()]}-${date.getFullYear()}`;
+}
+
+// The shape to reserve for a picture or video. A missing, zero or nonsense size falls back, and an extreme
+// one is clamped, so a bad value can't collapse the box or make it absurdly tall.
+export function assetRatio(width: number | undefined, height: number | undefined, fallback: number) {
+  if (!width || !height || !Number.isFinite(width / height) || width <= 0 || height <= 0) return fallback;
+  return Math.min(4, Math.max(0.25, width / height));
+}
