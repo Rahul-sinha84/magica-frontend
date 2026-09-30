@@ -1,4 +1,4 @@
-import { QueryClient } from "@tanstack/react-query";
+import { MutationCache, QueryCache, QueryClient } from "@tanstack/react-query";
 
 export class ApiError extends Error {
   constructor(
@@ -13,8 +13,19 @@ export class ApiError extends Error {
 
 const NO_RETRY_STATUSES = [401, 403, 404];
 
-export function makeQueryClient() {
+interface Options {
+  // called when the backend still says 401 after a fresh-token retry
+  onUnauthorized?: () => void;
+}
+
+export function makeQueryClient({ onUnauthorized }: Options = {}) {
+  const onError = (error: Error) => {
+    if (error instanceof ApiError && error.status === 401) onUnauthorized?.();
+  };
+
   return new QueryClient({
+    queryCache: new QueryCache({ onError }),
+    mutationCache: new MutationCache({ onError }),
     defaultOptions: {
       queries: {
         staleTime: 30_000,
