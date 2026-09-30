@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ApiError, makeQueryClient } from "@/lib/queryClient";
 
 function shouldRetry(error: Error, failureCount: number) {
@@ -34,5 +34,36 @@ describe("query retry policy", () => {
 
   it("gives every caller its own client", () => {
     expect(makeQueryClient()).not.toBe(makeQueryClient());
+  });
+
+  describe("when the backend keeps rejecting the session", () => {
+    it("calls onUnauthorized for a 401 from a query", async () => {
+      const onUnauthorized = vi.fn();
+      const client = makeQueryClient({ onUnauthorized });
+      await client
+        .fetchQuery({ queryKey: ["x"], queryFn: () => Promise.reject(new ApiError(401, "no")), retry: false })
+        .catch(() => {});
+      expect(onUnauthorized).toHaveBeenCalledOnce();
+    });
+
+    it("calls onUnauthorized for a 401 from a mutation", async () => {
+      const onUnauthorized = vi.fn();
+      const client = makeQueryClient({ onUnauthorized });
+      await client
+        .getMutationCache()
+        .build(client, { mutationFn: () => Promise.reject(new ApiError(401, "no")) })
+        .execute(undefined)
+        .catch(() => {});
+      expect(onUnauthorized).toHaveBeenCalledOnce();
+    });
+
+    it("ignores other failures", async () => {
+      const onUnauthorized = vi.fn();
+      const client = makeQueryClient({ onUnauthorized });
+      await client
+        .fetchQuery({ queryKey: ["y"], queryFn: () => Promise.reject(new ApiError(500, "boom")), retry: false })
+        .catch(() => {});
+      expect(onUnauthorized).not.toHaveBeenCalled();
+    });
   });
 });
