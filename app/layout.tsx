@@ -5,7 +5,7 @@ import { AppProviders } from "@/providers/AppProviders";
 import "./globals.css";
 
 const figtree = Figtree({ subsets: ["latin"], variable: "--font-figtree" });
-const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono" });
+const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono", preload: false });
 
 export const metadata: Metadata = {
   title: "Magica",
