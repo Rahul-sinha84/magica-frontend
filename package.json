@@ -4,13 +4,16 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3001",
-    "build": "next build",
+    "build": "node scripts/contracts-check.mjs && next build",
     "start": "next start -p 3001",
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "contracts:check": "node scripts/contracts-check.mjs",
+    "contracts:generate-lock": "node scripts/contracts-generate-lock.mjs",
+    "contracts:sync": "node scripts/contracts-sync.mjs"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.9.7",
