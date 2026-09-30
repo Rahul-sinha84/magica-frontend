@@ -1,7 +1,7 @@
 import { type ClassValue, clsx } from "clsx";
 import { format } from "date-fns";
 import { twMerge } from "tailwind-merge";
-import type { AgentStreamMetadata, RunStatus } from "@/types";
+import type { AgentStreamMetadata, Chat, Credits, RunStatus } from "@/types";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -13,6 +13,16 @@ const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 export function truncate(text: string, maxLength: number) {
   const chars = Array.from(graphemes.segment(text), ({ segment }) => segment);
   return chars.length <= maxLength ? text : `${chars.slice(0, maxLength).join("")}...`;
+}
+
+// A task can come back with an empty title (for example if naming it failed).
+export function chatTitle(chat: Pick<Chat, "title">) {
+  return chat.title.trim() || "Untitled task";
+}
+
+// What can still be spent: credits reserved by runs in flight are not available.
+export function availableCredits({ balance, held }: Credits) {
+  return Math.max(0, balance - held);
 }
 
 // 29_660_000 -> "29.66M", 290_000 -> "0.29M", 9_500 -> "9,500"

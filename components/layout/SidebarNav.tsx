@@ -48,7 +48,7 @@ function NavItem({ entry, rail }: { entry: Entry; rail: boolean }) {
       {content}
     </Link>
   ) : (
-    <button type="button" aria-label={label} title="Not available in this build" className={className}>
+    <button type="button" aria-label={label} aria-disabled="true" title="Not available in this build" className={className}>
       {content}
     </button>
   );

@@ -2,8 +2,10 @@ import type { z } from "zod";
 import {
   ActiveRunResponseSchema,
   ChatListResponseSchema,
+  ChatResponseSchema,
   CreateChatResponseSchema,
   CreditsResponseSchema,
+  ErrorCodeSchema,
   MessageListResponseSchema,
   SendMessageResponseSchema,
 } from "@/contracts";
@@ -38,6 +40,16 @@ function anySignal(...signals: AbortSignal[]) {
     signal.addEventListener("abort", () => controller.abort(signal.reason), { once: true });
   }
   return controller.signal;
+}
+
+// The backend's error shape is ErrorResponse: { error, code, details? }. Each part is read on its own,
+// so a code added by a newer backend still leaves the message usable. Anything else (an HTML page from
+// a proxy, say) yields no message and no code, and describeStatus takes over.
+function readError(body: unknown) {
+  const field = (name: string) => (typeof body === "object" && body !== null ? (body as Record<string, unknown>)[name] : undefined);
+  const error = field("error");
+  const code = ErrorCodeSchema.safeParse(field("code"));
+  return { error: typeof error === "string" ? error : "", code: code.success ? code.data : undefined };
 }
 
 function describeStatus(status: number) {
@@ -90,8 +102,8 @@ export function createApi(getToken: GetToken, { timeoutMs = 30_000 } = {}) {
     }
     if (!res.ok) {
       const body: unknown = await res.json().catch(() => null);
-      const message = typeof body === "object" && body !== null && "error" in body ? body.error : null;
-      throw new ApiError(res.status, typeof message === "string" && message ? message : describeStatus(res.status), body);
+      const { error, code } = readError(body);
+      throw new ApiError(res.status, error || describeStatus(res.status), body, code);
     }
     return res;
   }
@@ -115,9 +127,13 @@ export function createApi(getToken: GetToken, { timeoutMs = 30_000 } = {}) {
 
   return {
     chats: {
-      list: (signal?: AbortSignal) => json("/api/chats", ChatListResponseSchema, { signal }),
-      create: (title = "New chat") =>
-        json("/api/chats", CreateChatResponseSchema, { method: "POST", body: { title } }),
+      // the server orders the list (pinned first, then recent) and pages it; pass back the cursor it gave
+      list: (cursor?: string | null, signal?: AbortSignal) =>
+        json(`/api/chats${cursor ? `?cursor=${enc(cursor)}` : ""}`, ChatListResponseSchema, { signal }),
+      get: (chatId: string, signal?: AbortSignal) => json(`/api/chats/${enc(chatId)}`, ChatResponseSchema, { signal }),
+      // without a title the server names the chat
+      create: (title?: string) =>
+        json("/api/chats", CreateChatResponseSchema, { method: "POST", body: title ? { title } : {} }),
       delete: (chatId: string) => empty(`/api/chats/${enc(chatId)}`, { method: "DELETE" }),
     },
     messages: {

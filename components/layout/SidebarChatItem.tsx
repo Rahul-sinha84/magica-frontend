@@ -8,7 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { cn } from "@/lib/utils";
+import { chatTitle, cn } from "@/lib/utils";
 import type { Chat } from "@/types";
 
 interface Props {
@@ -18,6 +18,7 @@ interface Props {
 }
 
 export function SidebarChatItem({ chat, active, onDelete }: Props) {
+  const title = chatTitle(chat);
   return (
     <div
       className={cn(
@@ -28,7 +29,7 @@ export function SidebarChatItem({ chat, active, onDelete }: Props) {
       <Link
         href={`/chat/${encodeURIComponent(chat.id)}`}
         aria-current={active ? "page" : undefined}
-        className="flex h-[34px] min-w-0 flex-1 items-center rounded-lg px-2 outline-none focus-visible:ring-2 focus-visible:ring-ring group-focus-within/item:pr-10 group-hover/item:pr-10"
+        className="flex h-[34px] min-w-0 flex-1 items-center rounded-lg px-2 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring group-focus-within/item:pr-10 group-hover/item:pr-10 [@media(hover:none)]:pr-10"
       >
         <span
           className={cn(
@@ -36,7 +37,7 @@ export function SidebarChatItem({ chat, active, onDelete }: Props) {
             active && "text-text-primary",
           )}
         >
-          {chat.title}
+          {title}
         </span>
       </Link>
 
@@ -44,7 +45,7 @@ export function SidebarChatItem({ chat, active, onDelete }: Props) {
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            aria-label={`Options for ${chat.title}`}
+            aria-label={`Options for ${title}`}
             className="absolute right-1.5 flex size-6 items-center justify-center rounded text-text-secondary opacity-0 outline-none hover:bg-surface-tertiary focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring group-focus-within/item:opacity-100 group-hover/item:opacity-100 data-[state=open]:opacity-100 [@media(hover:none)]:opacity-100"
           >
             <Ellipsis className="size-4" />

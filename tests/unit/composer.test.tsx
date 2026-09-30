@@ -55,6 +55,36 @@ describe("Composer", () => {
     await userEvent.type(box, "{Enter}");
   });
 
+  describe("the 32,000 character limit", () => {
+    const atLimit = "x".repeat(32_000);
+
+    it("lets you send exactly the maximum", async () => {
+      const { onSubmit, send } = setup({ value: atLimit });
+      expect(send).toBeEnabled();
+      await userEvent.click(send);
+      expect(onSubmit).toHaveBeenCalledOnce();
+    });
+
+    it("blocks a longer message, with a reason, instead of silently cutting it", async () => {
+      const { onSubmit, send, box } = setup({ value: atLimit + "x" });
+      expect(send).toBeDisabled();
+      await userEvent.type(box, "{Enter}");
+      expect(onSubmit).not.toHaveBeenCalled();
+      expect(screen.getByRole("alert")).toHaveTextContent("Message is too long · 32,001 / 32,000");
+    });
+
+    it("shows a count only when you are close to the limit", () => {
+      setup({ value: "x".repeat(28_799) });
+      expect(screen.queryByText(/\/ 32,000/)).not.toBeInTheDocument();
+    });
+
+    it("starts counting at 90% and stays quiet about it until the limit is passed", () => {
+      setup({ value: "x".repeat(28_800) });
+      expect(screen.getByText("28,800 / 32,000")).toBeInTheDocument();
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
+  });
+
   it("focuses itself when asked to", () => {
     const { box } = setup({ autoFocus: true });
     expect(box).toHaveFocus();

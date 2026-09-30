@@ -11,7 +11,7 @@ import { SidebarChatItem } from "./SidebarChatItem";
 import { SidebarSkeleton } from "./SidebarSkeleton";
 
 export function SidebarTasks() {
-  const { data: chats, isPending, refetch } = useChats();
+  const { chats, isPending, refetch, hasNextPage, fetchNextPage, isFetchingNextPage, isFetchNextPageError } = useChats();
   const { chatId } = useParams<{ chatId?: string }>();
   const deleteChat = useDeleteChat();
   // the chat is kept after the dialog closes so its title doesn't vanish mid fade-out
@@ -42,7 +42,7 @@ export function SidebarTasks() {
       </h2>
       <ul className="mt-0.5 space-y-0.5">
         {chats.map((chat) => (
-          <li key={chat.id}>
+          <li key={chat.id} className="[contain-intrinsic-size:auto_36px] [content-visibility:auto]">
             <SidebarChatItem
               chat={chat}
               active={chat.id === chatId}
@@ -54,6 +54,18 @@ export function SidebarTasks() {
           </li>
         ))}
       </ul>
+      {(hasNextPage || isFetchNextPageError) && (
+        <div className="flex flex-col items-center gap-1 py-2">
+          {isFetchNextPageError && (
+            <p role="alert" className="text-xs text-text-secondary">
+              Couldn&apos;t load more tasks.
+            </p>
+          )}
+          <Button variant="ghost" size="sm" disabled={isFetchingNextPage} onClick={() => fetchNextPage()}>
+            {isFetchingNextPage ? "Loading…" : isFetchNextPageError ? "Try again" : "Show more"}
+          </Button>
+        </div>
+      )}
       <DeleteChatDialog
         chat={target}
         open={dialogOpen}

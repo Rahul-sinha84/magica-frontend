@@ -1,6 +1,6 @@
-// Source of truth: magica-backend. Re-sync with `pnpm contracts:sync`, never edit by hand.
+// Generated from magica-backend/src/contracts by `pnpm contracts:sync` (run in the backend repo). Do not edit by hand.
 import { z } from "zod";
-import { IsoDateTimeSchema } from "./common";
+import { CursorQuerySchema, IsoDateTimeSchema, NO_NUL_MESSAGE, noNul } from "./common";
 
 export const MessageRoleSchema = z.enum(["USER", "ASSISTANT", "SYSTEM", "TOOL"]);
 
@@ -44,7 +44,8 @@ export const ToolResultBlockSchema = z.object({
   type: z.literal("tool_result"),
   toolCallId: z.string(),
   toolName: z.string(),
-  result: z.unknown(),
+  // optional: a failed tool may have no result, and JSONB drops undefined keys, so the stored block has none
+  result: z.unknown().optional(),
   isError: z.boolean().default(false),
   errorMessage: z.string().optional(),
 });
@@ -65,6 +66,7 @@ export const UsageBlockSchema = z.object({
   creditCost: z.number().optional(),
 });
 
+// Strict: used by the server to validate everything it persists.
 export const ContentBlockSchema = z.discriminatedUnion("type", [
   TextBlockSchema,
   ThinkingBlockSchema,
@@ -77,8 +79,8 @@ export const ContentBlockSchema = z.discriminatedUnion("type", [
   UsageBlockSchema,
 ]);
 
-// One block we don't understand (for example a type added by a newer backend) must not
-// blank the whole conversation, so invalid blocks are dropped instead of failing the parse.
+// Lenient: used when reading. One block we don't understand (for example a type added by a newer
+// backend) must not blank the whole conversation, so invalid blocks are dropped instead of failing the parse.
 export const ContentBlocksSchema = z.array(z.unknown()).transform((items) =>
   items.flatMap((item) => {
     const parsed = ContentBlockSchema.safeParse(item);
@@ -96,9 +98,26 @@ export const MessageSchema = z.object({
   contentBlocks: ContentBlocksSchema,
   status: MessageStatusSchema,
   createdAt: IsoDateTimeSchema,
+  // the run this turn belongs to (both the user message that started it and the assistant reply)
   agentRunId: z.string().nullable().optional(),
   // chosen by the client when sending, so an optimistic message can be matched to its server copy
   clientMessageId: z.string().nullable().optional(),
+});
+
+// The text is stored exactly as typed (indentation and code blocks matter), so it is only checked for
+// being non-blank and NUL-free, never trimmed.
+export const SendMessageBodySchema = z.strictObject({
+  content: z
+    .string()
+    .max(32_000)
+    .refine((text) => text.trim().length > 0, { error: "Message can't be empty." })
+    .refine(noNul, { error: NO_NUL_MESSAGE }),
+  attachments: z.array(z.httpUrl()).max(10).default([]),
+  // lower-cased, so the same id in a different case can't slip past the server's duplicate check
+  clientMessageId: z
+    .uuid()
+    .transform((id) => id.toLowerCase())
+    .optional(),
 });
 
 export const SendMessageResponseSchema = z.object({
@@ -112,8 +131,11 @@ export const SendMessageResponseSchema = z.object({
   realtimeTokenExpiresAt: IsoDateTimeSchema,
 });
 
-// `messages` are oldest to newest within the page. `cursor` fetches the next OLDER page
-// and is null once the start of the conversation has been reached.
+export const MessageListQuerySchema = CursorQuerySchema;
+
+// Finished messages only: a reply that is still being generated is delivered by the run (see
+// ActiveRunResponse), never by this list. `messages` are oldest to newest within the page. `cursor`
+// fetches the next OLDER page and is null once the start of the conversation has been reached.
 export const MessageListResponseSchema = z.object({
   messages: z.array(MessageSchema),
   cursor: z.string().nullable(),
@@ -126,4 +148,5 @@ export type ToolResultBlock = z.infer<typeof ToolResultBlockSchema>;
 export type ImageBlock = z.infer<typeof ImageBlockSchema>;
 export type VideoBlock = z.infer<typeof VideoBlockSchema>;
 export type UsageBlock = z.infer<typeof UsageBlockSchema>;
+export type SendMessageBody = z.infer<typeof SendMessageBodySchema>;
 export type SendMessageResponse = z.infer<typeof SendMessageResponseSchema>;

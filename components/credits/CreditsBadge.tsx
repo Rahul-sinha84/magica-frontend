@@ -3,7 +3,7 @@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Sparkles2Icon } from "@/components/icons";
 import { useCredits } from "@/hooks/useCredits";
-import { formatCredits } from "@/lib/utils";
+import { availableCredits, formatCredits } from "@/lib/utils";
 
 // The pill in the top right of the chat header.
 export function CreditsBadge() {
@@ -11,8 +11,9 @@ export function CreditsBadge() {
 
   if (isPending) return <Skeleton className="h-8 w-24 rounded-full" />;
 
-  const hasCredits = data ? data.balance > 0 : true;
-  const label = !hasCredits ? "Upgrade" : data ? formatCredits(data.balance) : "—";
+  const available = data && availableCredits(data);
+  const hasCredits = available === undefined || available > 0;
+  const label = !hasCredits ? "Upgrade" : available !== undefined ? formatCredits(available) : "—";
   const description = !hasCredits
     ? "You are out of credits. Upgrade for more."
     : data
@@ -39,7 +40,7 @@ export function CreditsRow() {
     <div className="flex items-center justify-between px-2 text-xs">
       <span className="text-text-primary">Available Credits</span>
       <span className="font-medium text-text-secondary" aria-live="polite">
-        {data ? formatCredits(data.balance) : "—"}
+        {data ? formatCredits(availableCredits(data)) : "—"}
       </span>
     </div>
   );

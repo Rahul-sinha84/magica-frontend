@@ -1,4 +1,9 @@
 // Types are always inferred from the Zod contracts, never declared by hand.
+import type { z } from "zod";
+import type { ChatListResponseSchema } from "@/contracts";
+
+export type ChatListResponse = z.infer<typeof ChatListResponseSchema>;
+
 export type {
   ActiveRunResponse,
   AgentRun,
@@ -7,6 +12,8 @@ export type {
   Chat,
   ContentBlock,
   Credits,
+  ErrorCode,
+  ErrorResponse,
   ImageBlock,
   Message,
   RunStatus,

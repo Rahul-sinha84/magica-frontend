@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { onlineManager } from "@tanstack/react-query";
 import { ApiError, makeQueryClient } from "@/lib/queryClient";
 
 function shouldRetry(error: Error, failureCount: number) {
@@ -64,6 +65,27 @@ describe("query retry policy", () => {
         .fetchQuery({ queryKey: ["y"], queryFn: () => Promise.reject(new ApiError(500, "boom")), retry: false })
         .catch(() => {});
       expect(onUnauthorized).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("when the browser is offline", () => {
+    afterEach(() => onlineManager.setOnline(true));
+
+    it("tries the request anyway instead of waiting on a loading state forever", () => {
+      const defaults = makeQueryClient().getDefaultOptions();
+      expect(defaults.queries?.networkMode).toBe("offlineFirst");
+      expect(defaults.mutations?.networkMode).toBe("offlineFirst");
+    });
+
+    it("reports the failure instead of pausing to retry", () => {
+      onlineManager.setOnline(false);
+      expect(shouldRetry(new ApiError(0, "offline"), 0)).toBe(false);
+    });
+
+    it("goes back to retrying once the connection is back", () => {
+      onlineManager.setOnline(false);
+      onlineManager.setOnline(true);
+      expect(shouldRetry(new ApiError(0, "blip"), 0)).toBe(true);
     });
   });
 });

@@ -4,21 +4,23 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Composer } from "@/components/composer/Composer";
-import { useChats } from "@/hooks/useChats";
+import { useChat } from "@/hooks/useChat";
+import { chatTitle } from "@/lib/utils";
+import { ApiError } from "@/lib/queryClient";
 import { ChatHeader } from "./ChatHeader";
 
 // Phase 3 shell: header, an empty conversation area and the composer. Messages arrive in phase 4.
 export function ChatWindow({ chatId }: { chatId: string }) {
-  const { data: chats, isFetching } = useChats();
-  const chat = chats?.find((c) => c.id === chatId);
+  const { data: chat, error } = useChat(chatId);
   const [text, setText] = useState("");
+  // only the server saying "not found" counts; a failed request shouldn't claim the task is gone
+  const missing = error instanceof ApiError && error.status === 404;
 
   useEffect(() => {
-    document.title = chat ? `${chat.title} | Magica` : "Magica";
+    document.title = chat ? `${chatTitle(chat)} | Magica` : "Magica";
   }, [chat]);
 
-  // the list is fresh and doesn't have this chat: it was deleted, or the link is wrong
-  if (chats && !chat && !isFetching) {
+  if (missing) {
     return (
       <div className="flex min-w-0 flex-1 flex-col">
         <ChatHeader />

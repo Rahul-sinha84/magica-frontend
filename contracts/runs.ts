@@ -1,7 +1,10 @@
-// Source of truth: magica-backend. Re-sync with `pnpm contracts:sync`, never edit by hand.
+// Generated from magica-backend/src/contracts by `pnpm contracts:sync` (run in the backend repo). Do not edit by hand.
 import { z } from "zod";
 import { IsoDateTimeSchema } from "./common";
 import { ContentBlocksSchema, ImageBlockSchema, VideoBlockSchema } from "./messages";
+
+// Name of the Trigger.dev realtime stream that carries AgentStreamChunk items.
+export const AGENT_STREAM_ID = "chunks";
 
 // Trigger.dev spells it CANCELED; we normalise to CANCELLED at the boundary.
 export const RunStatusSchema = z
@@ -29,15 +32,7 @@ export const ActiveRunResponseSchema = z.object({
 
 // Run metadata: coarse progress only. The content itself arrives as stream chunks.
 export const AgentStreamMetadataSchema = z.object({
-  status: z.enum([
-    "thinking",
-    "streaming",
-    "calling-tool",
-    "complete",
-    "failed",
-    "cancelled",
-    "stopping",
-  ]),
+  status: z.enum(["thinking", "streaming", "calling-tool", "complete", "failed", "cancelled", "stopping"]),
   step: z.string().optional(),
   thinkingDurationMs: z.number().optional(),
   currentTool: z

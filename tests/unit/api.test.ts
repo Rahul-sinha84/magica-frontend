@@ -3,12 +3,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createApi } from "@/lib/api";
 import { BACKEND_URL } from "@/lib/config";
 import { ApiError } from "@/lib/queryClient";
-import { getMockDb, PAGE_SIZE } from "../mocks/fixtures";
+import { getMockDb } from "../mocks/fixtures";
 import { MOCK_REPLY, RUN_MS } from "../mocks/handlers";
 import { server } from "../mocks/server";
 
 const at = (path: string) => `${BACKEND_URL}${path}`;
 const api = createApi(async () => "test-token");
+// the backend accepts only UUIDs as client message ids
+const uuid = () => crypto.randomUUID();
+const PAGE_SIZE = 50; // the backend's default page size
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -54,9 +57,9 @@ describe("responses", () => {
     expect((await failure(api.credits.get())).status).toBe(502);
   });
 
-  it("uses the backend's error message", async () => {
+  it("uses the backend's error message and code", async () => {
     const error = await failure(api.messages.list("missing-chat"));
-    expect(error).toMatchObject({ status: 404, message: "Chat not found" });
+    expect(error).toMatchObject({ status: 404, message: "Chat not found", code: "NOT_FOUND" });
   });
 
   it("falls back to a generic message when the error has no body", async () => {
@@ -102,9 +105,44 @@ describe("when the network misbehaves", () => {
       }),
     );
     const controller = new AbortController();
-    const pending = api.chats.list(controller.signal);
+    const pending = api.chats.list(null, controller.signal);
     controller.abort();
     await expect(pending).rejects.not.toBeInstanceOf(ApiError);
+  });
+});
+
+describe("the backend's error shape", () => {
+  const respond = (body: unknown, status = 400) => server.use(http.get(at("/api/credits"), () => HttpResponse.json(body as object, { status })));
+
+  it("reads error, code and keeps the details", async () => {
+    respond({ error: "Not enough credits.", code: "INSUFFICIENT_CREDITS", details: { needed: 50, available: 10 } }, 402);
+    const error = await failure(api.credits.get());
+    expect(error).toMatchObject({ status: 402, message: "Not enough credits.", code: "INSUFFICIENT_CREDITS" });
+    expect(error.body).toMatchObject({ details: { needed: 50, available: 10 } });
+  });
+
+  it("has no code when the body has none", async () => {
+    respond({ error: "Something broke" }, 500);
+    const error = await failure(api.credits.get());
+    expect(error.message).toBe("Something broke");
+    expect(error.code).toBeUndefined();
+  });
+
+  it("ignores a code that isn't a string", async () => {
+    respond({ error: "Odd", code: { nested: true } }, 400);
+    expect((await failure(api.credits.get())).code).toBeUndefined();
+  });
+
+  it("falls back to wording by status, with no code, when the body isn't the backend's", async () => {
+    server.use(http.get(at("/api/credits"), () => new HttpResponse("<html>Bad gateway</html>", { status: 502 })));
+    const error = await failure(api.credits.get());
+    expect(error).toMatchObject({ status: 502, message: "The server ran into a problem. Try again in a moment." });
+    expect(error.code).toBeUndefined();
+  });
+
+  it("has no code for failures that never reached the backend", async () => {
+    server.use(http.get(at("/api/credits"), () => HttpResponse.error()));
+    expect((await failure(api.credits.get())).code).toBeUndefined();
   });
 });
 
@@ -139,7 +177,7 @@ describe("abort signals", () => {
   it("still times out when the caller also passes a signal", async () => {
     server.use(never);
     const impatient = createApi(async () => "test-token", { timeoutMs: 50 });
-    const error = await failure(impatient.chats.list(new AbortController().signal));
+    const error = await failure(impatient.chats.list(null, new AbortController().signal));
     expect(error.message).toBe("The server took too long to respond.");
   });
 
@@ -148,10 +186,10 @@ describe("abort signals", () => {
     // @ts-expect-error simulating a browser without the API
     delete AbortSignal.any;
     try {
-      await expect(api.chats.list(new AbortController().signal)).resolves.toHaveProperty("chats");
+      await expect(api.chats.list(null, new AbortController().signal)).resolves.toHaveProperty("chats");
       const controller = new AbortController();
       server.use(never);
-      const pending = api.chats.list(controller.signal);
+      const pending = api.chats.list(null, controller.signal);
       controller.abort();
       await expect(pending).rejects.not.toBeInstanceOf(ApiError);
     } finally {
@@ -164,7 +202,7 @@ describe("abort signals", () => {
     server.use(http.get(at("/api/chats"), () => (requests(), HttpResponse.json({ chats: [] }))));
     const controller = new AbortController();
     controller.abort();
-    await expect(api.chats.list(controller.signal)).rejects.not.toBeInstanceOf(ApiError);
+    await expect(api.chats.list(null, controller.signal)).rejects.not.toBeInstanceOf(ApiError);
     expect(requests).not.toHaveBeenCalled();
   });
 });
@@ -248,14 +286,14 @@ describe("messages", () => {
   });
 
   it("rejects an empty message", async () => {
-    expect(await failure(api.messages.send("chat-greeting", { content: "   ", clientMessageId: "c-empty" }))).toMatchObject({ status: 400, message: "Message is empty" });
+    expect(await failure(api.messages.send("chat-greeting", { content: "   ", clientMessageId: uuid() }))).toMatchObject({ status: 400, code: "VALIDATION_FAILED", message: "Message can't be empty." });
   });
 
   it("starts a run and names a new chat after its first message", async () => {
     const { chat } = await api.chats.create();
     expect(chat.title).toBe("New chat");
 
-    const sent = await api.messages.send(chat.id, { content: "Plan a trip to Lisbon", clientMessageId: "c-lisbon" });
+    const sent = await api.messages.send(chat.id, { content: "Plan a trip to Lisbon", clientMessageId: uuid() });
     expect(sent.message.role).toBe("USER");
     expect(sent.triggerRunId).toContain(sent.runId);
 
@@ -268,7 +306,7 @@ describe("messages", () => {
 
   it("stops reporting a run once it is cancelled", async () => {
     const { chat } = await api.chats.create();
-    const { runId } = await api.messages.send(chat.id, { content: "hello", clientMessageId: "c-hello" });
+    const { runId } = await api.messages.send(chat.id, { content: "hello", clientMessageId: uuid() });
     await api.runs.cancel(runId);
     expect((await api.runs.getActive(chat.id)).run).toBeNull();
   });
@@ -276,12 +314,13 @@ describe("messages", () => {
 
 describe("sending safely", () => {
   it("stores the client id on the message, so the UI can match its optimistic copy", async () => {
-    const sent = await api.messages.send("chat-greeting", { content: "hi", clientMessageId: "client-1" });
-    expect(sent.message.clientMessageId).toBe("client-1");
+    const clientMessageId = uuid();
+    const sent = await api.messages.send("chat-greeting", { content: "hi", clientMessageId });
+    expect(sent.message.clientMessageId).toBe(clientMessageId);
   });
 
   it("never creates a second message when the same send is repeated", async () => {
-    const input = { content: "retry me", clientMessageId: "client-2" };
+    const input = { content: "retry me", clientMessageId: uuid() };
     const first = await api.messages.send("chat-greeting", input);
     const again = await api.messages.send("chat-greeting", input);
 
@@ -291,15 +330,17 @@ describe("sending safely", () => {
   });
 
   it("treats the same client id in another chat as a new message", async () => {
-    const a = await api.messages.send("chat-greeting", { content: "x", clientMessageId: "shared" });
-    const b = await api.messages.send("chat-apple", { content: "x", clientMessageId: "shared" });
+    const shared = uuid();
+    const a = await api.messages.send("chat-greeting", { content: "x", clientMessageId: shared });
+    const b = await api.messages.send("chat-apple", { content: "x", clientMessageId: shared });
     expect(b.runId).not.toBe(a.runId);
   });
 
   it("refuses a second message while a response is still being generated", async () => {
-    await api.messages.send("chat-greeting", { content: "one", clientMessageId: "a" });
-    expect(await failure(api.messages.send("chat-greeting", { content: "two", clientMessageId: "b" }))).toMatchObject({
+    await api.messages.send("chat-greeting", { content: "one", clientMessageId: uuid() });
+    expect(await failure(api.messages.send("chat-greeting", { content: "two", clientMessageId: uuid() }))).toMatchObject({
       status: 409,
+      code: "RUN_ACTIVE",
       message: "A response is already being generated",
     });
   });
@@ -308,7 +349,7 @@ describe("sending safely", () => {
 describe("a run over time", () => {
   it("streams partial text, then lands the reply in the conversation", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
-    await api.messages.send("chat-greeting", { content: "go", clientMessageId: "t-1" });
+    await api.messages.send("chat-greeting", { content: "go", clientMessageId: uuid() });
 
     vi.advanceTimersByTime(RUN_MS / 2);
     const midway = await api.runs.getActive("chat-greeting");
@@ -324,20 +365,20 @@ describe("a run over time", () => {
 
   it("allows a new message once the run has finished", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
-    await api.messages.send("chat-greeting", { content: "one", clientMessageId: "a" });
+    await api.messages.send("chat-greeting", { content: "one", clientMessageId: uuid() });
     vi.advanceTimersByTime(RUN_MS + 1);
-    await expect(api.messages.send("chat-greeting", { content: "two", clientMessageId: "b" })).resolves.toHaveProperty("runId");
+    await expect(api.messages.send("chat-greeting", { content: "two", clientMessageId: uuid() })).resolves.toHaveProperty("runId");
   });
 
-  it("answers 409 when Stop is pressed just as the run finished", async () => {
+  it("answers with a 4xx when Stop is pressed just as the run finished", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
-    const { runId } = await api.messages.send("chat-greeting", { content: "go", clientMessageId: "t-2" });
+    const { runId } = await api.messages.send("chat-greeting", { content: "go", clientMessageId: uuid() });
     vi.advanceTimersByTime(RUN_MS + 1);
-    expect(await failure(api.runs.cancel(runId))).toMatchObject({ status: 409 });
+    expect(await failure(api.runs.cancel(runId))).toMatchObject({ status: 404, code: "NOT_FOUND" });
   });
 
   it("forgets a chat's messages and run when the chat is deleted", async () => {
-    await api.messages.send("chat-greeting", { content: "go", clientMessageId: "t-3" });
+    await api.messages.send("chat-greeting", { content: "go", clientMessageId: uuid() });
     await api.chats.delete("chat-greeting");
     expect(await failure(api.messages.list("chat-greeting"))).toMatchObject({ status: 404 });
     expect(await failure(api.runs.getActive("chat-greeting"))).toMatchObject({ status: 404 });
@@ -349,5 +390,110 @@ describe("chats", () => {
     await expect(api.chats.delete("chat-greeting")).resolves.toBeUndefined();
     expect((await api.chats.list()).chats.map((c) => c.id)).toEqual(["chat-apple"]);
     expect((await failure(api.chats.delete("chat-greeting"))).status).toBe(404);
+  });
+});
+
+describe("the chat list", () => {
+  const manyChats = (count: number, pinned: string[] = []) => {
+    const base = getMockDb().chats[0];
+    getMockDb().chats = Array.from({ length: count }, (_, i) => ({
+      ...base,
+      id: `t${i}`,
+      title: `Task ${i}`,
+      isPinned: pinned.includes(`t${i}`),
+      lastMessageAt: new Date(2026, 0, 1, 0, i).toISOString(),
+    }));
+  };
+
+  it("comes a page at a time, in the order the server chose, with a cursor until the end", async () => {
+    manyChats(120);
+    const first = await api.chats.list();
+    expect(first.chats).toHaveLength(50);
+    expect(first.chats[0].id).toBe("t119"); // newest first
+    expect(first.cursor).not.toBeNull();
+
+    const second = await api.chats.list(first.cursor);
+    const third = await api.chats.list(second.cursor);
+    expect(second.chats).toHaveLength(50);
+    expect(third.chats).toHaveLength(20);
+    expect(third.cursor).toBeNull();
+    expect(new Set([...first.chats, ...second.chats, ...third.chats].map((c) => c.id)).size).toBe(120);
+  });
+
+  it("lists pinned chats first", async () => {
+    manyChats(5, ["t0"]);
+    const { chats } = await api.chats.list();
+    expect(chats.map((c) => c.id)).toEqual(["t0", "t4", "t3", "t2", "t1"]);
+  });
+
+  it("has no cursor when everything fits on one page", async () => {
+    expect((await api.chats.list()).cursor).toBeNull();
+  });
+
+  it("rejects a cursor the server can't read", async () => {
+    server.use(http.get(at("/api/chats"), () => HttpResponse.json({ error: "Bad cursor", code: "VALIDATION_FAILED" }, { status: 400 })));
+    expect(await failure(api.chats.list("junk"))).toMatchObject({ status: 400, code: "VALIDATION_FAILED" });
+  });
+});
+
+describe("one chat", () => {
+  it("fetches a chat directly", async () => {
+    const { chat } = await api.chats.get("chat-greeting");
+    expect(chat).toMatchObject({ id: "chat-greeting", title: "Greeting", isPinned: false });
+  });
+
+  it("reports a missing chat as 404 NOT_FOUND", async () => {
+    expect(await failure(api.chats.get("nope"))).toMatchObject({ status: 404, code: "NOT_FOUND" });
+  });
+
+  it("escapes the id in the path", async () => {
+    let path = "";
+    server.use(http.get(at("/api/chats/*"), ({ request }) => ((path = new URL(request.url).pathname), HttpResponse.json({ error: "x", code: "NOT_FOUND" }, { status: 404 }))));
+    await failure(api.chats.get("a b?x"));
+    expect(path).toBe("/api/chats/a%20b%3Fx");
+  });
+});
+
+describe("creating a chat", () => {
+  it("lets the server name it when you give no title", async () => {
+    const { chat } = await api.chats.create();
+    expect(chat.title).toBe("New chat");
+    expect(chat.isPinned).toBe(false);
+  });
+
+  it("uses the title you give", async () => {
+    expect((await api.chats.create("Trip to Lisbon")).chat.title).toBe("Trip to Lisbon");
+  });
+
+  it("is refused for a title the backend would reject", async () => {
+    expect(await failure(api.chats.create("x".repeat(201)))).toMatchObject({ status: 400, code: "VALIDATION_FAILED" });
+  });
+});
+
+describe("what the backend refuses to accept", () => {
+  it("rejects a message over 32,000 characters and accepts exactly 32,000", async () => {
+    expect(await failure(api.messages.send("chat-greeting", { content: "x".repeat(32_001), clientMessageId: uuid() }))).toMatchObject({
+      status: 400,
+      code: "VALIDATION_FAILED",
+    });
+    await expect(api.messages.send("chat-greeting", { content: "x".repeat(32_000), clientMessageId: uuid() })).resolves.toHaveProperty("runId");
+  });
+
+  it("rejects a client message id that isn't a UUID", async () => {
+    expect(await failure(api.messages.send("chat-greeting", { content: "hi", clientMessageId: "not-a-uuid" }))).toMatchObject({
+      status: 400,
+      code: "VALIDATION_FAILED",
+    });
+  });
+
+  it("keeps the indentation of a message exactly as typed", async () => {
+    const code = "  if (x) {\n    run();\n  }\n";
+    const { message } = await api.messages.send("chat-greeting", { content: code, clientMessageId: uuid() });
+    expect(message.content).toBe(code);
+  });
+
+  it("rejects attachments that aren't http(s) links", async () => {
+    server.use(http.post(at("/api/chats/:chatId/messages"), () => HttpResponse.json({ error: "bad", code: "VALIDATION_FAILED" }, { status: 400 })));
+    expect(await failure(api.messages.send("chat-greeting", { content: "hi", clientMessageId: uuid(), attachments: ["javascript:alert(1)"] }))).toMatchObject({ status: 400 });
   });
 });

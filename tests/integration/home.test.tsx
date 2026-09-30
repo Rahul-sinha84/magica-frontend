@@ -60,4 +60,9 @@ describe("home screen", () => {
     renderApp(<HomeScreen />);
     expect(screen.getByRole("button", { name: /Magica Auto/ })).toBeInTheDocument();
   });
+
+  it("lets the model name shrink on a narrow phone instead of wrapping", () => {
+    renderApp(<HomeScreen />);
+    expect(screen.getByText("Magica Auto")).toHaveClass("truncate");
+  });
 });

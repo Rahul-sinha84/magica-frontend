@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { chatTitle, truncate } from "@/lib/utils";
 import type { Chat } from "@/types";
 
 interface Props {
@@ -25,8 +26,9 @@ export function DeleteChatDialog({ chat, open, pending, onClose, onConfirm }: Pr
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Delete this task?</DialogTitle>
-          <DialogDescription>
-            &ldquo;{chat?.title}&rdquo; and all of its messages will be permanently deleted.
+          <DialogDescription className="[overflow-wrap:anywhere]">
+            &ldquo;{chat && truncate(chatTitle(chat), 80)}&rdquo; and all of its messages will be
+            permanently deleted.
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>

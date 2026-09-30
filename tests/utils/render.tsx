@@ -1,4 +1,5 @@
 import type { ReactElement } from "react";
+import type { QueryClient } from "@tanstack/react-query";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { render } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -8,10 +9,12 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { makeQueryClient } from "@/lib/queryClient";
 
 // Renders with everything the app's providers give, minus retries and polling so failures show up fast.
-export function renderApp(ui: ReactElement) {
+export function renderApp(ui: ReactElement, { prepare }: { prepare?: (client: QueryClient) => void } = {}) {
   const client = makeQueryClient();
   const defaults = client.getDefaultOptions();
   client.setDefaultOptions({ ...defaults, queries: { ...defaults.queries, retry: false, refetchInterval: false } });
+
+  prepare?.(client);
 
   const wrap = (children: ReactElement) => (
     <ThemeProvider attribute="class" defaultTheme="light" enableSystem>

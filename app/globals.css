@@ -128,24 +128,3 @@
     @apply bg-background text-foreground text-sm antialiased;
   }
 }
-
-/* Clerk injects its own styles, so these need !important to win. */
-.account-button .cl-rootBox,
-.account-button .cl-userButtonTrigger,
-.account-button .cl-userButtonBox {
-  width: 100% !important;
-}
-.account-button .cl-userButtonTrigger {
-  border-radius: 6px !important;
-}
-.account-button .cl-userButtonBox {
-  height: 34px;
-  padding: 0 8px !important;
-  flex-direction: row-reverse !important;
-  justify-content: space-between !important;
-}
-.account-button .cl-userButtonOuterIdentifier {
-  padding-left: 0 !important;
-  font-size: 13px;
-  font-weight: 500;
-}

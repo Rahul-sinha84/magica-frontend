@@ -22,6 +22,18 @@ describe("credits pill", () => {
     expect(await screen.findByRole("button", { name: "Credits available: 4,200" })).toBeInTheDocument();
   });
 
+  it("shows what can still be spent, not the raw balance", async () => {
+    server.use(credits({ balance: 10_000_000, held: 3_000_000 }));
+    renderApp(<CreditsBadge />);
+    expect(await screen.findByRole("button", { name: "Credits available: 7.00M" })).toHaveTextContent("7.00M");
+  });
+
+  it("asks you to upgrade when everything left is reserved by a run in flight", async () => {
+    server.use(credits({ balance: 5_000_000, held: 5_000_000 }));
+    renderApp(<CreditsBadge />);
+    expect(await screen.findByRole("button", { name: /out of credits/i })).toHaveTextContent("Upgrade");
+  });
+
   it.each([0, -50])("asks you to upgrade at a balance of %i", async (balance) => {
     server.use(credits({ balance, held: 0 }));
     renderApp(<CreditsBadge />);

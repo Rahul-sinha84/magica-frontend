@@ -1,7 +1,6 @@
 import type { AgentRun, Chat, ContentBlock, Credits, Message, SendMessageResponse } from "@/types";
 
 export const MOCK_USER_ID = "user_mock";
-export const PAGE_SIZE = 50;
 
 const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
 
@@ -44,6 +43,7 @@ function chat(id: string, title: string, lastMessageMinutesAgo: number): Chat {
     id,
     title,
     userId: MOCK_USER_ID,
+    isPinned: false,
     createdAt: minutesAgo(lastMessageMinutesAgo + 1),
     updatedAt: minutesAgo(lastMessageMinutesAgo),
     lastMessageAt: minutesAgo(lastMessageMinutesAgo),

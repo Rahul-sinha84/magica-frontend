@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
+import { MAX_MESSAGE_LENGTH } from "@/lib/limits";
 import {
   ActiveRunResponseSchema,
+  ChatListResponseSchema,
+  ErrorCodeSchema,
+  ErrorResponseSchema,
+  SendMessageBodySchema,
+  foldChunks,
   AgentStreamChunkSchema,
   AgentStreamMetadataSchema,
   ChatSchema,
@@ -24,7 +30,7 @@ const message = (contentBlocks: unknown[]) => ({
 });
 
 describe("ChatSchema", () => {
-  const chat = { id: "c1", title: "Test", userId: "u1", createdAt: now, updatedAt: now, lastMessageAt: null };
+  const chat = { id: "c1", title: "Test", userId: "u1", isPinned: false, createdAt: now, updatedAt: now, lastMessageAt: null };
 
   it("parses a valid chat", () => {
     expect(ChatSchema.safeParse(chat).success).toBe(true);
@@ -177,5 +183,69 @@ describe("AgentStreamChunkSchema", () => {
   it("rejects an unknown chunk and an asset that is not image or video", () => {
     expect(AgentStreamChunkSchema.safeParse({ type: "mystery" }).success).toBe(false);
     expect(AgentStreamChunkSchema.safeParse({ type: "asset", asset: { type: "text", content: "x" } }).success).toBe(false);
+  });
+});
+
+describe("the chat list", () => {
+  const chat = { id: "c1", title: "T", userId: "u", isPinned: true, createdAt: now, updatedAt: now, lastMessageAt: now };
+
+  it("carries a cursor, null on the last page", () => {
+    expect(ChatListResponseSchema.parse({ chats: [chat], cursor: "abc" }).cursor).toBe("abc");
+    expect(ChatListResponseSchema.parse({ chats: [], cursor: null }).cursor).toBeNull();
+  });
+
+  it("insists on a cursor field so a missing one can't pass for 'no more pages'", () => {
+    expect(ChatListResponseSchema.safeParse({ chats: [chat] }).success).toBe(false);
+  });
+
+  it("needs isPinned on every chat", () => {
+    expect(ChatSchema.safeParse({ ...chat, isPinned: undefined }).success).toBe(false);
+  });
+});
+
+describe("the backend's error shape", () => {
+  it("has a message, a known code and optional details", () => {
+    const parsed = ErrorResponseSchema.parse({ error: "Nope", code: "RUN_ACTIVE", details: { runId: "r1" } });
+    expect(parsed).toMatchObject({ error: "Nope", code: "RUN_ACTIVE" });
+  });
+
+  it.each(["UNAUTHORIZED", "VALIDATION_FAILED", "NOT_FOUND", "RUN_ACTIVE", "INSUFFICIENT_CREDITS", "RATE_LIMITED", "SERVICE_UNAVAILABLE", "INTERNAL_ERROR"])(
+    "knows the code %s",
+    (code) => {
+      expect(ErrorCodeSchema.safeParse(code).success).toBe(true);
+    },
+  );
+
+  it("rejects a code it doesn't know", () => {
+    expect(ErrorCodeSchema.safeParse("BRAND_NEW_CODE").success).toBe(false);
+  });
+});
+
+describe("what a message may contain", () => {
+  const uuid = () => crypto.randomUUID();
+
+  it("keeps the frontend's length limit in step with the backend's", () => {
+    expect(SendMessageBodySchema.safeParse({ content: "x".repeat(MAX_MESSAGE_LENGTH), clientMessageId: uuid() }).success).toBe(true);
+    expect(SendMessageBodySchema.safeParse({ content: "x".repeat(MAX_MESSAGE_LENGTH + 1), clientMessageId: uuid() }).success).toBe(false);
+  });
+
+  it("refuses blank text, NUL characters and a client id that isn't a UUID", () => {
+    expect(SendMessageBodySchema.safeParse({ content: "  \n ", clientMessageId: uuid() }).success).toBe(false);
+    expect(SendMessageBodySchema.safeParse({ content: "a\u0000b", clientMessageId: uuid() }).success).toBe(false);
+    expect(SendMessageBodySchema.safeParse({ content: "hi", clientMessageId: "abc" }).success).toBe(false);
+  });
+
+  it("does not trim what you typed", () => {
+    expect(SendMessageBodySchema.parse({ content: "  indented\n", clientMessageId: uuid() }).content).toBe("  indented\n");
+  });
+});
+
+describe("foldChunks, shared with the backend", () => {
+  it("is available from the contracts and joins streamed text", () => {
+    const blocks = foldChunks([
+      { type: "text-delta", delta: "Hel" },
+      { type: "text-delta", delta: "lo" },
+    ]);
+    expect(blocks).toEqual([{ type: "text", content: "Hello" }]);
   });
 });

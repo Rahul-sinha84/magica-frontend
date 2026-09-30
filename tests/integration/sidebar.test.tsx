@@ -1,16 +1,20 @@
-import { screen, waitFor } from "@testing-library/react";
+import { onlineManager } from "@tanstack/react-query";
+import { screen, waitFor, within } from "@testing-library/react";
 import { delay, http, HttpResponse } from "msw";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { BACKEND_URL } from "@/lib/config";
 import { useMobileSidebar, useUiStore } from "@/stores/uiStore";
+import { clerkState } from "../mocks/clerk";
 import { getMockDb } from "../mocks/fixtures";
 import { navigation } from "../mocks/navigation";
 import { server } from "../mocks/server";
 import { renderApp } from "../utils/render";
 
 const at = (path: string) => `${BACKEND_URL}${path}`;
-const listChats = (chats: unknown[]) => http.get(at("/api/chats"), () => HttpResponse.json({ chats }));
+const listChats = (chats: unknown[], cursor: string | null = null) => http.get(at("/api/chats"), () => HttpResponse.json({ chats, cursor }));
+
+afterEach(() => onlineManager.setOnline(true));
 
 beforeEach(() => {
   useUiStore.setState({ sidebarCollapsed: false });
@@ -38,7 +42,7 @@ describe("recent tasks", () => {
     server.use(
       http.get(at("/api/chats"), async () => {
         await delay(150);
-        return HttpResponse.json({ chats: [] });
+        return HttpResponse.json({ chats: [], cursor: null });
       }),
     );
     renderApp(<Sidebar />);
@@ -200,7 +204,7 @@ describe("deleting a task", () => {
 
     // another tab deletes it; this tab's list still shows it
     getMockDb().chats = getMockDb().chats.filter((c) => c.id !== "chat-greeting");
-    client.setQueryData(["chats"], [...getMockDb().chats, greeting]);
+    client.setQueryData(["chats"], { pages: [{ chats: [...getMockDb().chats, greeting], cursor: null }], pageParams: [null] });
     server.use(http.delete(at("/api/chats/:chatId"), () => HttpResponse.json({ error: "Chat not found" }, { status: 404 })));
 
     await openDeleteDialog(user, "Greeting");
@@ -242,6 +246,12 @@ describe("footer", () => {
     expect(await screen.findByText("29.66M")).toBeInTheDocument();
   });
 
+  it("shows what can still be spent when a run has credits reserved", async () => {
+    getMockDb().credits = { balance: 29_660_000, held: 660_000 };
+    renderApp(<Sidebar />);
+    expect(await screen.findByText("29.00M")).toBeInTheDocument();
+  });
+
   it("shows a dash instead of a wrong number when credits can't be loaded", async () => {
     server.use(http.get(at("/api/credits"), () => HttpResponse.json({ error: "x" }, { status: 500 })));
     renderApp(<Sidebar />);
@@ -260,5 +270,180 @@ describe("footer", () => {
 
     await user.click(screen.getByRole("button", { name: "More" }));
     expect(screen.getByText("Available Credits")).toBeInTheDocument();
+  });
+});
+
+describe("awkward data", () => {
+  const base = () => getMockDb().chats[0];
+
+  it.each(["", "   "])("gives a task with the title %j a readable name", async (title) => {
+    server.use(listChats([{ ...base(), id: "blank", title }]));
+    renderApp(<Sidebar />);
+    expect(await screen.findByRole("link", { name: "Untitled task" })).toHaveAttribute("href", "/chat/blank");
+    expect(screen.getByRole("button", { name: "Options for Untitled task" })).toBeInTheDocument();
+  });
+
+  it("shows tasks in the order the server chose, pinned ones first", async () => {
+    const at = (id: string, isPinned: boolean) => ({ ...base(), id, title: id, isPinned });
+    server.use(listChats([at("pinned-but-old", true), at("recent", false), at("older", false)]));
+    renderApp(<Sidebar />);
+    await screen.findByRole("link", { name: "recent" });
+    const order = screen.getAllByRole("link").filter((a) => a.getAttribute("href")?.startsWith("/chat/")).map((a) => a.textContent);
+    expect(order).toEqual(["pinned-but-old", "recent", "older"]);
+  });
+
+  it("renders a few hundred tasks", async () => {
+    const many = Array.from({ length: 400 }, (_, i) => ({ ...base(), id: `t${i}`, title: `Task ${i}`, lastMessageAt: new Date(2026, 0, 1, 0, i).toISOString() }));
+    server.use(listChats(many));
+    renderApp(<Sidebar />);
+    expect(await screen.findByRole("link", { name: "Task 399" })).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Recent tasks" })).getAllByRole("listitem")).toHaveLength(400);
+  });
+
+  it("lets the browser skip drawing rows that are off screen", async () => {
+    renderApp(<Sidebar />);
+    const row = (await screen.findByRole("link", { name: "Greeting" })).closest("li");
+    expect(row?.className).toContain("[content-visibility:auto]");
+  });
+
+  it("keeps the options button visible and the title clear of it on a touch screen", async () => {
+    renderApp(<Sidebar />);
+    const link = await screen.findByRole("link", { name: "Greeting" });
+    expect(link.className).toContain("[@media(hover:none)]:pr-10");
+    expect(screen.getByRole("button", { name: "Options for Greeting" }).className).toContain("[@media(hover:none)]:opacity-100");
+  });
+
+  it("keeps a long title from pushing the buttons out of the delete dialog", async () => {
+    server.use(listChats([{ ...base(), id: "long", title: "x".repeat(300) }]));
+    const { user } = renderApp(<Sidebar />);
+
+    const dialog = await openDeleteDialog(user, "x".repeat(300));
+    expect(dialog.textContent).not.toContain("x".repeat(300));
+    expect(dialog.textContent).toContain("x".repeat(80) + "...");
+    expect(within(dialog).getByText(/permanently deleted/).className).toContain("[overflow-wrap:anywhere]");
+    expect(within(dialog).getByRole("button", { name: "Delete" })).toBeInTheDocument();
+  });
+});
+
+describe("when the browser is offline", () => {
+  it("shows the error and a retry, not a loading state that never ends", async () => {
+    onlineManager.setOnline(false);
+    server.use(http.get(at("/api/chats"), () => HttpResponse.error()));
+    renderApp(<Sidebar />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't load your tasks.");
+    expect(screen.queryByLabelText("Loading tasks")).not.toBeInTheDocument();
+  });
+
+  it("recovers with Try again once the connection is back", async () => {
+    onlineManager.setOnline(false);
+    server.use(http.get(at("/api/chats"), () => HttpResponse.error(), { once: true }));
+    const { user } = renderApp(<Sidebar />);
+    await screen.findByRole("alert");
+
+    onlineManager.setOnline(true);
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByRole("link", { name: "Greeting" })).toBeInTheDocument();
+  });
+});
+
+describe("controls that do nothing in this build", () => {
+  it("say so to assistive technology, while the real link does not", () => {
+    renderApp(<Sidebar />);
+    for (const name of ["Tasks", "Projects", "Library", "Tools", "API / MCP", "Help & Support", "Unfair Advantage", "Search", "Settings"]) {
+      expect(screen.getAllByRole("button", { name })[0]).toHaveAttribute("aria-disabled", "true");
+    }
+    expect(screen.getByRole("link", { name: "New task" })).not.toHaveAttribute("aria-disabled");
+  });
+});
+
+describe("the account button", () => {
+  it("keeps the name on one line with an ellipsis, using Clerk's supported styling", () => {
+    renderApp(<Sidebar />);
+    const elements = clerkState.userButtonProps?.appearance?.elements ?? {};
+    expect(elements.userButtonOuterIdentifier).toContain("truncate!");
+    expect(elements.userButtonOuterIdentifier).toContain("min-w-0!");
+    expect(elements.userButtonBox).toContain("w-full!");
+  });
+});
+
+describe("a long list of tasks", () => {
+  const task = (id: string) => ({ ...getMockDb().chats[0], id, title: `Task ${id}` });
+  const pages = (first: unknown[], second: unknown[]) =>
+    http.get(at("/api/chats"), ({ request }) =>
+      new URL(request.url).searchParams.get("cursor") === "page-2"
+        ? HttpResponse.json({ chats: second, cursor: null })
+        : HttpResponse.json({ chats: first, cursor: "page-2" }),
+    );
+
+  it("loads the next page when you ask, and stops offering once it is the last", async () => {
+    server.use(pages([task("a"), task("b")], [task("c")]));
+    const { user } = renderApp(<Sidebar />);
+    await screen.findByRole("link", { name: "Task a" });
+    expect(screen.queryByRole("link", { name: "Task c" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Show more" }));
+
+    expect(await screen.findByRole("link", { name: "Task c" })).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: /Task/ })).toHaveLength(3);
+    expect(screen.queryByRole("button", { name: "Show more" })).not.toBeInTheDocument();
+  });
+
+  it("does not offer more when everything fit on one page", async () => {
+    renderApp(<Sidebar />);
+    await screen.findByRole("link", { name: "Greeting" });
+    expect(screen.queryByRole("button", { name: "Show more" })).not.toBeInTheDocument();
+  });
+
+  it("shows a task once even if it moved between pages while you scrolled", async () => {
+    server.use(pages([task("a"), task("b")], [task("b"), task("c")]));
+    const { user } = renderApp(<Sidebar />);
+    await screen.findByRole("link", { name: "Task a" });
+    await user.click(screen.getByRole("button", { name: "Show more" }));
+
+    await screen.findByRole("link", { name: "Task c" });
+    expect(screen.getAllByRole("link", { name: "Task b" })).toHaveLength(1);
+  });
+
+  it("says so and lets you retry when the next page can't be loaded", async () => {
+    let failing = true;
+    server.use(
+      http.get(at("/api/chats"), ({ request }) => {
+        if (new URL(request.url).searchParams.get("cursor") !== "page-2") return HttpResponse.json({ chats: [task("a")], cursor: "page-2" });
+        return failing ? HttpResponse.json({ error: "down", code: "INTERNAL_ERROR" }, { status: 500 }) : HttpResponse.json({ chats: [task("b")], cursor: null });
+      }),
+    );
+    const { user } = renderApp(<Sidebar />);
+    await screen.findByRole("link", { name: "Task a" });
+
+    await user.click(screen.getByRole("button", { name: "Show more" }));
+    expect(await screen.findByText("Couldn't load more tasks.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Task a" })).toBeInTheDocument();
+
+    failing = false;
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByRole("link", { name: "Task b" })).toBeInTheDocument();
+  });
+
+  it("removes a deleted task from whichever page it was on", async () => {
+    let deleted = false;
+    server.use(
+      http.get(at("/api/chats"), ({ request }) =>
+        new URL(request.url).searchParams.get("cursor") === "page-2"
+          ? HttpResponse.json({ chats: deleted ? [] : [task("z")], cursor: null })
+          : HttpResponse.json({ chats: [task("a")], cursor: "page-2" }),
+      ),
+      http.delete(at("/api/chats/:chatId"), () => ((deleted = true), new HttpResponse(null, { status: 204 }))),
+    );
+    const { user } = renderApp(<Sidebar />);
+    await screen.findByRole("link", { name: "Task a" });
+    await user.click(screen.getByRole("button", { name: "Show more" }));
+    await screen.findByRole("link", { name: "Task z" });
+
+    await openDeleteDialog(user, "Task z");
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+
+    await waitFor(() => expect(screen.queryByRole("link", { name: "Task z" })).not.toBeInTheDocument());
+    expect(screen.getByRole("link", { name: "Task a" })).toBeInTheDocument();
   });
 });

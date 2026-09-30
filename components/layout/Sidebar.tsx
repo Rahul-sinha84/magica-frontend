@@ -69,7 +69,7 @@ export function Sidebar() {
         aria-label="Sidebar"
         inert={!isDesktop && !mobileOpen}
         className={cn(
-          "fixed inset-y-2 left-2 z-40 flex w-60 shrink-0 flex-col overflow-hidden rounded-3xl bg-surface-main-2 shadow-[inset_0_0_0_1px_var(--line-tertiary)] transition-[transform,width] duration-200 md:static md:translate-x-0",
+          "fixed inset-y-2 left-2 z-40 flex w-60 shrink-0 flex-col overflow-hidden rounded-3xl bg-surface-main-2 shadow-[inset_0_0_0_1px_var(--line-tertiary)] transition-[transform,width] duration-200 motion-reduce:transition-none md:static md:translate-x-0",
           mobileOpen ? "translate-x-0" : "-translate-x-[calc(100%+1rem)]",
           rail && "md:w-12",
         )}
@@ -86,7 +86,7 @@ export function Sidebar() {
                 <Wordmark />
               </span>
             </button>
-            <button type="button" aria-label="Search" title="Not available in this build" className={cn(round, "mb-1 mt-4")}>
+            <button type="button" aria-label="Search" title="Not available in this build" aria-disabled="true" className={cn(round, "mb-1 mt-4")}>
               <Search className="size-4" />
             </button>
           </div>
@@ -100,7 +100,7 @@ export function Sidebar() {
               <Wordmark />
             </Link>
             <div className="flex items-center gap-0.5">
-              <button type="button" aria-label="Search" title="Not available in this build" className={round}>
+              <button type="button" aria-label="Search" title="Not available in this build" aria-disabled="true" className={round}>
                 <Search className="size-4" />
               </button>
               <button

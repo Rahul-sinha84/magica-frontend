@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cn, formatClockTime, formatCredits, isTerminalStatus, truncate } from "@/lib/utils";
+import { availableCredits, chatTitle, cn, formatClockTime, formatCredits, isTerminalStatus, truncate } from "@/lib/utils";
 
 describe("cn", () => {
   it("joins class names and skips falsy values", () => {
@@ -82,5 +82,26 @@ describe("isTerminalStatus", () => {
     for (const status of ["PENDING", "RUNNING", "thinking", "streaming", "calling-tool", "stopping"] as const) {
       expect(isTerminalStatus(status)).toBe(false);
     }
+  });
+});
+
+describe("chatTitle", () => {
+  it("uses the title when there is one", () => {
+    expect(chatTitle({ title: "Plan a trip" })).toBe("Plan a trip");
+  });
+
+  it.each(["", "   ", "\n\t"])("falls back for the empty title %j", (title) => {
+    expect(chatTitle({ title })).toBe("Untitled task");
+  });
+});
+
+describe("availableCredits", () => {
+  it("is what is left after credits reserved by runs in flight", () => {
+    expect(availableCredits({ balance: 10_000_000, held: 3_000_000 })).toBe(7_000_000);
+    expect(availableCredits({ balance: 10_000_000, held: 0 })).toBe(10_000_000);
+  });
+
+  it("never goes below zero", () => {
+    expect(availableCredits({ balance: 100, held: 250 })).toBe(0);
   });
 });

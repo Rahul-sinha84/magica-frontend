@@ -1,10 +1,11 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ApiError } from "@/lib/queryClient";
-import type { Chat } from "@/types";
+import type { ChatListResponse } from "@/types";
+import { chatQueryKey } from "./useChat";
 import { chatsQueryKey } from "./useChats";
 import { useApi } from "./useApi";
 
@@ -16,7 +17,10 @@ export function useDeleteChat() {
 
   // the chat is gone from the screen whether we deleted it or it was already gone
   function forget(chatId: string) {
-    queryClient.setQueryData<Chat[]>(chatsQueryKey, (chats) => chats?.filter((c) => c.id !== chatId));
+    queryClient.setQueryData<InfiniteData<ChatListResponse, string | null>>(chatsQueryKey, (data) =>
+      data && { ...data, pages: data.pages.map((page) => ({ ...page, chats: page.chats.filter((c) => c.id !== chatId) })) },
+    );
+    queryClient.removeQueries({ queryKey: chatQueryKey(chatId) });
     queryClient.removeQueries({ queryKey: ["messages", chatId] });
     if (params.chatId === chatId) router.replace("/chat");
   }
