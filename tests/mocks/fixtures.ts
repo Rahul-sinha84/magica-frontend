@@ -82,6 +82,10 @@ export function createMockDb(): MockDb {
 
 let db = createMockDb();
 export const getMockDb = () => db;
+// the browser mock keeps its data across a reload, so a run can be followed after one
+export const setMockDb = (next: MockDb) => {
+  db = next;
+};
 export const resetMockDb = () => {
   db = createMockDb();
 };

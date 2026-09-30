@@ -4,6 +4,7 @@ import {
   CursorQuerySchema,
   SendMessageBodySchema,
   type Chat,
+  type ContentBlock,
   type ErrorCode,
   type Message,
 } from "@/contracts";
@@ -14,6 +15,21 @@ import { getMockDb, MOCK_USER_ID } from "./fixtures";
 // A mock run "streams" for this long, then the assistant reply lands in the conversation.
 export const RUN_MS = 4000;
 export const MOCK_REPLY = "Sure! This answer comes from the mock backend, so you can see how a run streams in.";
+
+// What a mock run has produced after `progress` (0 to 1) of its time: a short think, one step that runs
+// and then finishes, then the reply text growing. The saved reply is the same blocks at 1.
+export function mockRunBlocks(progress: number): ContentBlock[] {
+  const blocks: ContentBlock[] = [];
+  if (progress < 0.1) return blocks;
+  blocks.push({ type: "thinking", content: "The user wants a quick answer. Keep it short.", ...(progress >= 0.25 && { durationMs: 900 }) });
+  if (progress < 0.25) return blocks;
+  const done = progress >= 0.45;
+  blocks.push({ type: "tool_call", toolCallId: "mock-step", toolName: "skill", toolInput: { name: "writing" }, status: done ? "completed" : "running", ...(done && { durationMs: 1200 }) });
+  if (done) blocks.push({ type: "tool_result", toolCallId: "mock-step", toolName: "skill", result: { ok: true }, isError: false });
+  const text = MOCK_REPLY.slice(0, Math.floor(MOCK_REPLY.length * Math.max(0, (progress - 0.5) / 0.5)));
+  if (text) blocks.push({ type: "text", content: text });
+  return blocks;
+}
 
 const url = (path: string) => `${BACKEND_URL}${path}`;
 const isAuthed = (request: Request) => request.headers.get("authorization")?.startsWith("Bearer ");
@@ -50,7 +66,7 @@ function settleRun(chatId: string) {
     chatId,
     role: "ASSISTANT",
     content: MOCK_REPLY,
-    contentBlocks: [{ type: "text", content: MOCK_REPLY }],
+    contentBlocks: mockRunBlocks(1),
     status: "COMPLETED",
     createdAt: now,
     agentRunId: run.id,
@@ -182,13 +198,14 @@ export const handlers = [
     }
     // text grows with elapsed time, like a real stream would
     const progress = Math.min(1, (Date.now() - Date.parse(run.startedAt)) / RUN_MS);
-    const partialText = MOCK_REPLY.slice(0, Math.floor(MOCK_REPLY.length * progress));
+    const partialBlocks = mockRunBlocks(progress);
+    const partialText = partialBlocks.map((block) => (block.type === "text" ? block.content : "")).join("") || null;
     return HttpResponse.json({
       run,
       realtimeToken: "mock-realtime-token",
       realtimeTokenExpiresAt: tokenExpiry(),
       partialText,
-      partialBlocks: partialText ? [{ type: "text", content: partialText }] : [],
+      partialBlocks,
     });
   }),
 
@@ -200,8 +217,21 @@ export const handlers = [
     // Stop pressed just as the run finished. What the real backend answers is not decided yet, so the
     // client must treat any 4xx here as "look again", not as a failure.
     if (run.status !== "RUNNING") return notFound("Active run");
+    // like the backend: the run ends at once and whatever was written so far is kept, marked as stopped
+    const now = new Date().toISOString();
+    const partial = mockRunBlocks((Date.now() - Date.parse(run.startedAt ?? now)) / RUN_MS);
     run.status = "CANCELLED";
-    run.completedAt = new Date().toISOString();
+    run.completedAt = now;
+    getMockDb().messages[run.chatId]?.push({
+      id: newId("m"),
+      chatId: run.chatId,
+      role: "ASSISTANT",
+      content: partial.map((block) => (block.type === "text" ? block.content : "")).join(""),
+      contentBlocks: partial,
+      status: "CANCELLED",
+      createdAt: now,
+      agentRunId: run.id,
+    });
     return new HttpResponse(null, { status: 204 });
   }),
 

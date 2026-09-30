@@ -4,6 +4,7 @@ import { useMutation, useQueryClient, type InfiniteData } from "@tanstack/react-
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ApiError } from "@/lib/queryClient";
+import { useChatStore } from "@/stores/chatStore";
 import type { ChatListResponse } from "@/types";
 import { chatQueryKey } from "./useChat";
 import { chatsQueryKey } from "./useChats";
@@ -22,6 +23,8 @@ export function useDeleteChat() {
     );
     queryClient.removeQueries({ queryKey: chatQueryKey(chatId) });
     queryClient.removeQueries({ queryKey: ["messages", chatId] });
+    // a run it had in flight is over with it (the backend cancels it), so nothing waits for it
+    useChatStore.getState().clearRun(chatId);
     if (params.chatId === chatId) router.replace("/chat");
   }
 

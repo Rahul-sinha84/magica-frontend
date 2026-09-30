@@ -53,6 +53,12 @@ interface ChatStore {
 
   runs: Record<string, RunInFlight>;
   setRun: (chatId: string, run: RunInFlight) => void;
+  // what we learn about the run in flight later (a fresh stream token, its Trigger.dev id)
+  patchRun: (chatId: string, patch: Partial<Omit<RunInFlight, "runId">>) => void;
+  // Stop was accepted; the server hasn't confirmed the run is over yet
+  stopping: Record<string, true>;
+  setStopping: (chatId: string) => void;
+  clearStopping: (chatId: string) => void;
   clearRun: (chatId: string) => void;
 
   artifactPanel: ArtifactPanel;
@@ -90,7 +96,12 @@ export const useChatStore = create<ChatStore>((set) => ({
 
   runs: {},
   setRun: (chatId, run) => set((s) => ({ runs: { ...s.runs, [chatId]: run } })),
-  clearRun: (chatId) => set((s) => ({ runs: without(s.runs, chatId) })),
+  patchRun: (chatId, patch) => set((s) => (s.runs[chatId] ? { runs: { ...s.runs, [chatId]: { ...s.runs[chatId], ...patch } } } : s)),
+  // the run is over: whatever stop was waiting for it is done too
+  clearRun: (chatId) => set((s) => ({ runs: without(s.runs, chatId), stopping: without(s.stopping, chatId), stopRequested: without(s.stopRequested, chatId) })),
+  stopping: {},
+  setStopping: (chatId) => set((s) => (s.runs[chatId] ? { stopping: { ...s.stopping, [chatId]: true } } : s)),
+  clearStopping: (chatId) => set((s) => ({ stopping: without(s.stopping, chatId) })),
 
   artifactPanel: CLOSED_PANEL,
   openArtifactPanel: (url, type, title) => set({ artifactPanel: { isOpen: true, url, type, title: title ?? null } }),

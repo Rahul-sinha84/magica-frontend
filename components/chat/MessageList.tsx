@@ -6,14 +6,15 @@ import { ArrowDown, Loader2 } from "lucide-react";
 import type { OptimisticMessage } from "@/stores/chatStore";
 import type { Message as MessageData } from "@/types";
 import { Message } from "./Message";
-import { TypingIndicator } from "./TypingIndicator";
+import type { AgentStream } from "@/hooks/useAgentStream";
+import { StreamingMessage } from "./StreamingMessage";
 
 // Within this many pixels of the bottom counts as "at the bottom": new content keeps you there.
 export const NEAR_BOTTOM_PX = 80;
 // Scrolling this close to the top asks for the next older page.
 const NEAR_TOP_PX = 400;
 
-type Item = { key: string; kind: "message"; message: MessageData; pending: boolean } | { key: "thinking"; kind: "thinking" };
+type Item = { key: string; kind: "message"; message: MessageData; pending: boolean } | { key: "streaming"; kind: "streaming"; stream: AgentStream };
 
 const asMessage = (p: OptimisticMessage): MessageData => ({
   id: `pending-${p.clientMessageId}`,
@@ -31,14 +32,15 @@ interface Props {
   messages: MessageData[];
   // messages we've sent that the server hasn't confirmed yet
   pending: OptimisticMessage[];
-  thinking: boolean;
+  // the reply being written, if any
+  stream: AgentStream | null;
   hasOlder: boolean;
   isLoadingOlder: boolean;
   onLoadOlder: () => void;
 }
 
 // The conversation. Only the rows on screen exist in the page, however long it is.
-export function MessageList({ messages, pending, thinking, hasOlder, isLoadingOlder, onLoadOlder }: Props) {
+export function MessageList({ messages, pending, stream, hasOlder, isLoadingOlder, onLoadOlder }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
   // the row at the top of the screen when older messages were requested, so it can stay put
@@ -52,9 +54,9 @@ export function MessageList({ messages, pending, thinking, hasOlder, isLoadingOl
         .filter((m) => m.role === "USER" || m.role === "ASSISTANT")
         .map((message) => ({ key: message.clientMessageId ?? message.id, kind: "message" as const, message, pending: false })),
       ...pending.map((p) => ({ key: p.clientMessageId, kind: "message" as const, message: asMessage(p), pending: true })),
-      ...(thinking ? [{ key: "thinking" as const, kind: "thinking" as const }] : []),
+      ...(stream ? [{ key: "streaming" as const, kind: "streaming" as const, stream }] : []),
     ],
-    [messages, pending, thinking],
+    [messages, pending, stream],
   );
 
   // the list reads the virtualizer fresh on every render, so the compiler skipping it is fine
@@ -150,7 +152,7 @@ export function MessageList({ messages, pending, thinking, hasOlder, isLoadingOl
                 style={{ transform: `translateY(${row.start}px)` }}
               >
                 <div className="mx-auto w-full max-w-[900px] px-2 pb-6 sm:px-4">
-                  {item.kind === "thinking" ? <TypingIndicator /> : <Message message={item.message} pending={item.pending} />}
+                  {item.kind === "streaming" ? <StreamingMessage stream={item.stream} /> : <Message message={item.message} pending={item.pending} />}
                 </div>
               </div>
             );

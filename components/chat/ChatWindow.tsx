@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Composer } from "@/components/composer/Composer";
 import { useChat } from "@/hooks/useChat";
 import { useMessages } from "@/hooks/useMessages";
-import { useRunWatcher } from "@/hooks/useRunWatcher";
+import { useAgentStream } from "@/hooks/useAgentStream";
 import { useSendMessage } from "@/hooks/useSendMessage";
 import { useStopRun } from "@/hooks/useStopRun";
 import { useChatStore } from "@/stores/chatStore";
@@ -27,7 +27,7 @@ export function ChatWindow({ chatId }: { chatId: string }) {
   const running = useChatStore((state) => !!state.runs[chatId]);
   const { send, isSending } = useSendMessage(chatId);
   const stop = useStopRun(chatId);
-  useRunWatcher(chatId);
+  const stream = useAgentStream(chatId);
   // our own messages stay on screen until the server's copy (same clientMessageId) is in the list
   const pending = useMemo(() => {
     const confirmed = new Set(messages.map((m) => m.clientMessageId).filter(Boolean));
@@ -64,7 +64,7 @@ export function ChatWindow({ chatId }: { chatId: string }) {
         <MessageList
           messages={messages}
           pending={pending}
-          thinking={running}
+          stream={stream}
           hasOlder={!!hasNextPage}
           isLoadingOlder={isFetchingNextPage}
           onLoadOlder={() => void fetchNextPage()}
@@ -80,6 +80,7 @@ export function ChatWindow({ chatId }: { chatId: string }) {
           // while a message is on its way the run isn't known yet, but Stop already works: it cancels the run the moment it starts
           running={running || isSending || pending.length > 0}
           sending={isSending}
+          stopping={stream?.phase === "stopping"}
         />
       </div>
     </div>

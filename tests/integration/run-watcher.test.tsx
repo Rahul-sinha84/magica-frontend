@@ -11,7 +11,7 @@ import { renderApp, typeAndSend } from "../utils/render";
 import { stubLayout } from "../utils/layout";
 
 // poll fast, so the tests don't wait two seconds per round
-vi.mock("@/lib/timing", () => ({ RUN_POLL_MS: 40 }));
+vi.mock("@/lib/timing", async (original) => ({ ...(await original<typeof import("@/lib/timing")>()), RUN_POLL_MS: 40 }));
 stubLayout();
 
 afterEach(() => vi.useRealTimers());
@@ -112,15 +112,23 @@ describe("the Stop button always sends the cancel request", () => {
     await waitFor(() => expect(ids).toEqual(["run-r"]));
   });
 
-  it("every time it is pressed while the run is still going", async () => {
-    const ids = watchCancels();
+  it("shows Stopping at once, and offers Stop again if the cancel didn't go through", async () => {
     const now = new Date().toISOString();
     getMockDb().runs["chat-greeting"] = { id: "run-r", chatId: "chat-greeting", triggerRunId: "t-r", status: "RUNNING", startedAt: now, completedAt: null };
+    let calls = 0;
+    server.use(
+      http.post(cancelUrl, async () => {
+        calls++;
+        await delay(100);
+        return calls === 1 ? HttpResponse.json({ error: "down", code: "INTERNAL_ERROR" }, { status: 500 }) : new HttpResponse(null, { status: 204 });
+      }),
+    );
     const { user } = renderApp(<ChatWindow chatId="chat-greeting" />);
-    const stop = await screen.findByRole("button", { name: "Stop response" });
-    await user.click(stop);
-    await user.click(stop);
-    await waitFor(() => expect(ids.length).toBeGreaterThanOrEqual(2));
+    await user.click(await screen.findByRole("button", { name: "Stop response" }));
+    expect(await screen.findByRole("button", { name: "Stopping" })).toBeDisabled();
+    expect(await screen.findByText("Couldn't stop the response")).toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: "Stop response" }));
+    await waitFor(() => expect(calls).toBe(2));
   });
 
   it("does not show Stop for a message that failed to send", async () => {

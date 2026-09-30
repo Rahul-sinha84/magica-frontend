@@ -8,6 +8,8 @@ interface Props {
   running: boolean;
   // the message is on its way to the server
   sending: boolean;
+  // Stop was accepted; waiting for the server to confirm the run is over
+  stopping?: boolean;
   canSend: boolean;
   onSend: () => void;
   onStop: () => void;
@@ -16,7 +18,14 @@ interface Props {
 const base =
   "flex size-8 shrink-0 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
-export function SendButton({ running, sending, canSend, onSend, onStop }: Props) {
+export function SendButton({ running, sending, stopping = false, canSend, onSend, onStop }: Props) {
+  if (running && stopping) {
+    return (
+      <button type="button" aria-label="Stopping" disabled className={cn(base, "bg-destructive/15 text-destructive")}>
+        <Loader2 className="size-4 animate-spin" />
+      </button>
+    );
+  }
   if (running) {
     return (
       <button type="button" aria-label="Stop response" onClick={onStop} className={cn(base, "bg-destructive/15 text-destructive hover:bg-destructive/25")}>

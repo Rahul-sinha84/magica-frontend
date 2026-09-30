@@ -5,11 +5,13 @@ import { afterAll, afterEach, beforeAll, vi } from "vitest";
 import { resetClerk } from "./mocks/clerk";
 import { resetMockDb } from "./mocks/fixtures";
 import { resetNavigation } from "./mocks/navigation";
+import { realtime } from "./mocks/trigger";
 import { server } from "./mocks/server";
 import { useChatStore } from "@/stores/chatStore";
 
 vi.mock("@clerk/nextjs", async () => (await import("./mocks/clerk")).clerkModule);
 vi.mock("next/navigation", async () => (await import("./mocks/navigation")).navigationModule);
+vi.mock("@trigger.dev/react-hooks", async () => (await import("./mocks/trigger")).triggerModule);
 vi.mock("next/link", async () => (await import("./mocks/navigation")).linkModule);
 
 // jsdom gaps that Radix UI (menus, dialogs, tooltips) relies on
@@ -47,6 +49,7 @@ afterEach(() => {
   resetMockDb();
   resetClerk();
   resetNavigation();
+  realtime.reset();
   useChatStore.setState(useChatStore.getInitialState(), true);
   localStorage.clear();
   setViewport(true);

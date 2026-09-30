@@ -18,7 +18,16 @@ export function useStopRun(chatId: string) {
     mutationFn: async () => {
       const store = useChatStore.getState();
       const run = store.runs[chatId];
-      if (run) return cancelRun(api, run.runId);
+      if (run) {
+        // show "stopping" at once, until the server confirms the run has ended
+        store.setStopping(chatId);
+        try {
+          return await cancelRun(api, run.runId);
+        } catch (error) {
+          useChatStore.getState().clearStopping(chatId); // it didn't go through: Stop can be pressed again
+          throw error;
+        }
+      }
       // the message is still on its way, so there is no run to cancel yet: cancel it as soon as there is
       if ((store.optimistic[chatId] ?? []).length > 0) store.requestStop(chatId);
     },

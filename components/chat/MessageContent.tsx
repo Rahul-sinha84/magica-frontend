@@ -11,7 +11,7 @@ import { StepGroup } from "./StepGroup";
 
 type Block = Extract<Segment, { kind: "block" }>["block"];
 
-function Thinking({ block }: { block: Extract<ContentBlock, { type: "thinking" }> }) {
+function Thinking({ block, active }: { block: Extract<ContentBlock, { type: "thinking" }>; active: boolean }) {
   const [open, setOpen] = useState(false);
   return (
     <div>
@@ -21,7 +21,7 @@ function Thinking({ block }: { block: Extract<ContentBlock, { type: "thinking" }
         onClick={() => setOpen((o) => !o)}
         className="group flex items-center gap-1 rounded-md text-sm font-medium text-text-secondary outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        {block.durationMs ? `Thought for ${formatDuration(block.durationMs)}` : "Thinking"}
+        {block.durationMs ? `Thought for ${formatDuration(block.durationMs)}` : <span className={active ? "thinking-shimmer" : undefined}>Thinking</span>}
         <ChevronRight className={cn("size-3.5 transition-transform", open && "rotate-90")} aria-hidden="true" />
       </button>
       {open && <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-text-secondary">{block.content}</p>}
@@ -79,7 +79,7 @@ function Source({ url, title }: { url: string; title?: string | null }) {
   );
 }
 
-function BlockView({ block }: { block: Block }) {
+function BlockView({ block, thinkingActive }: { block: Block; thinkingActive: boolean }) {
   switch (block.type) {
     case "text":
       return <Markdown>{block.content}</Markdown>;
@@ -90,7 +90,7 @@ function BlockView({ block }: { block: Block }) {
         </div>
       );
     case "thinking":
-      return <Thinking block={block} />;
+      return <Thinking block={block} active={thinkingActive} />;
     case "image":
       return <Picture block={block} />;
     case "video":
@@ -103,12 +103,12 @@ function BlockView({ block }: { block: Block }) {
 }
 
 // Everything in an assistant reply, top to bottom: text, steps, pictures, sources.
-export function MessageContent({ blocks }: { blocks: readonly ContentBlock[] }) {
+export function MessageContent({ blocks, thinkingActive = false }: { blocks: readonly ContentBlock[]; thinkingActive?: boolean }) {
   const segments = groupBlocks(blocks).filter((segment) => segment.kind === "steps" || segment.block.type !== "usage");
   return (
     <div className="space-y-4">
       {segments.map((segment, i) =>
-        segment.kind === "steps" ? <StepGroup key={`steps-${segment.calls[0].toolCallId}`} calls={segment.calls} results={segment.results} /> : <BlockView key={i} block={segment.block} />,
+        segment.kind === "steps" ? <StepGroup key={`steps-${segment.calls[0].toolCallId}`} calls={segment.calls} results={segment.results} /> : <BlockView key={i} block={segment.block} thinkingActive={thinkingActive} />,
       )}
     </div>
   );

@@ -77,7 +77,9 @@ export function useSendMessage(chatId: string | null) {
         // Stop was pressed while this was on its way
         if (useChatStore.getState().stopRequested[targetId]) {
           useChatStore.getState().clearStopRequest(targetId);
-          await cancelRun(api, response.runId).catch((error: Error) => toast.error("Couldn't stop the response", { description: error.message }));
+          await cancelRun(api, response.runId)
+            .then(() => useChatStore.getState().setStopping(targetId))
+            .catch((error: Error) => toast.error("Couldn't stop the response", { description: error.message }));
         }
       }
       // the server's copy is in the list now (seeded above, or found by the refetch), so the pending one can go
@@ -135,6 +137,8 @@ export function useSendMessage(chatId: string | null) {
         }
       }
 
+      // a Stop left over from an earlier send whose run never showed up must not cancel this one
+      store.clearStopRequest(targetId);
       store.addOptimistic({ clientMessageId, chatId: targetId, content, createdAt: new Date().toISOString() });
       if (!chatId) router.push(`/chat/${encodeURIComponent(targetId)}`);
       // Once the task exists, a failure belongs to ITS composer: we are on its page by now, not on home.

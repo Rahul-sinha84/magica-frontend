@@ -351,7 +351,13 @@ describe("a run over time", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     await api.messages.send("chat-greeting", { content: "go", clientMessageId: uuid() });
 
-    vi.advanceTimersByTime(RUN_MS / 2);
+    vi.advanceTimersByTime(RUN_MS * 0.3);
+    const early = await api.runs.getActive("chat-greeting");
+    // thinking first, then a step that is still running, before any text
+    expect(early.partialBlocks.map((b) => b.type)).toEqual(["thinking", "tool_call"]);
+    expect(early.partialText).toBeNull();
+
+    vi.advanceTimersByTime(RUN_MS * 0.45);
     const midway = await api.runs.getActive("chat-greeting");
     expect(midway.run?.status).toBe("RUNNING");
     expect(midway.partialText?.length).toBeGreaterThan(0);

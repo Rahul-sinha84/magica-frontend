@@ -18,6 +18,8 @@ interface Props {
   running?: boolean;
   // the message is on its way to the server
   sending?: boolean;
+  // Stop was accepted and the server is winding the run down
+  stopping?: boolean;
   autoFocus?: boolean;
 }
 
@@ -25,7 +27,7 @@ const INERT = "Not available in this build";
 const action =
   "flex shrink-0 items-center justify-center rounded-full text-icon-secondary outline-none hover:bg-surface-secondary focus-visible:ring-2 focus-visible:ring-ring";
 
-export function Composer({ value, onChange, placeholder, onSubmit, onStop, running = false, sending = false, autoFocus }: Props) {
+export function Composer({ value, onChange, placeholder, onSubmit, onStop, running = false, sending = false, stopping = false, autoFocus }: Props) {
   const tooLong = value.length > MAX_MESSAGE_LENGTH;
   const canSend = !!onSubmit && value.trim().length > 0 && !tooLong && !running && !sending;
 
@@ -34,7 +36,9 @@ export function Composer({ value, onChange, placeholder, onSubmit, onStop, runni
       <ComposerTextarea
         value={value}
         onChange={onChange}
-        onSubmit={canSend ? onSubmit : undefined}
+        // Enter belongs to sending even when sending isn't possible right now (a reply is being written, the
+        // box is empty): it does nothing then, rather than slipping a new line into the next message
+        onSubmit={onSubmit && (() => canSend && onSubmit())}
         placeholder={placeholder}
         autoFocus={autoFocus}
       />
@@ -58,7 +62,7 @@ export function Composer({ value, onChange, placeholder, onSubmit, onStop, runni
           <button type="button" aria-label="Dictation" title={INERT} aria-disabled="true" className={cn(action, "size-[34px]")}>
             <Mic className="size-4" />
           </button>
-          <SendButton running={running} sending={sending} canSend={canSend} onSend={() => onSubmit?.()} onStop={() => onStop?.()} />
+          <SendButton running={running} sending={sending} stopping={stopping} canSend={canSend} onSend={() => onSubmit?.()} onStop={() => onStop?.()} />
         </div>
       </div>
     </div>
