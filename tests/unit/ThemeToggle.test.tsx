@@ -52,4 +52,46 @@ describe("ThemeToggle", () => {
     renderToggle();
     expect(screen.getByRole("radio", { name: "Dark theme" })).toBeChecked();
   });
+
+  describe("with the keyboard", () => {
+    it("moves the selection with the arrow keys, like any radio group", async () => {
+      const user = userEvent.setup();
+      renderToggle();
+      screen.getByRole("radio", { name: "Light theme" }).focus();
+
+      await user.keyboard("{ArrowRight}");
+      expect(screen.getByRole("radio", { name: "Dark theme" })).toBeChecked();
+      expect(screen.getByRole("radio", { name: "Dark theme" })).toHaveFocus();
+      expect(document.documentElement).toHaveClass("dark");
+
+      await user.keyboard("{ArrowLeft}{ArrowLeft}");
+      expect(screen.getByRole("radio", { name: "System theme" })).toBeChecked();
+    });
+
+    it("wraps around at both ends", async () => {
+      const user = userEvent.setup();
+      renderToggle();
+      screen.getByRole("radio", { name: "Light theme" }).focus();
+
+      await user.keyboard("{ArrowLeft}{ArrowLeft}");
+      expect(screen.getByRole("radio", { name: "Dark theme" })).toBeChecked();
+      await user.keyboard("{ArrowRight}");
+      expect(screen.getByRole("radio", { name: "System theme" })).toBeChecked();
+    });
+
+    it("has a single tab stop, on the selected option", () => {
+      renderToggle();
+      expect(screen.getByRole("radio", { name: "Light theme" })).toHaveAttribute("tabindex", "0");
+      expect(screen.getByRole("radio", { name: "Dark theme" })).toHaveAttribute("tabindex", "-1");
+      expect(screen.getByRole("radio", { name: "System theme" })).toHaveAttribute("tabindex", "-1");
+    });
+
+    it("ignores other keys", async () => {
+      const user = userEvent.setup();
+      renderToggle();
+      screen.getByRole("radio", { name: "Light theme" }).focus();
+      await user.keyboard("a{Escape}");
+      expect(screen.getByRole("radio", { name: "Light theme" })).toBeChecked();
+    });
+  });
 });

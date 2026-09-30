@@ -23,3 +23,9 @@ test("spinner is replaced by the form once Clerk loads", async ({ page }) => {
   await expect(page.getByText("Continue", { exact: true }).first()).toBeVisible();
   await expect(page.getByRole("main").getByLabel("Loading")).toHaveCount(0);
 });
+
+test("a signed-out visitor to a specific task is sent back to it after signing in", async ({ page }) => {
+  await page.goto("/chat/some-task-id");
+  await expect(page).toHaveURL(/\/sign-in/);
+  expect(new URL(page.url()).searchParams.get("redirect_url")).toContain("/chat/some-task-id");
+});
