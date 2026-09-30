@@ -1,5 +1,26 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Contracts
+
+The API contracts (Zod schemas, plus `fold.ts`) are owned by the backend and **pushed** into this repo. Nothing here creates or edits them.
+
+To update them, run this in the **backend** repo:
+
+```bash
+cd ../magica-backend
+pnpm contracts:sync        # set FRONTEND_REPO_PATH if this repo is not next to it
+```
+
+then check the result here:
+
+```bash
+pnpm contracts:check
+```
+
+- Never edit `contracts/*.ts` or `contracts.lock.json` by hand. `pnpm contracts:sync` in this repo only prints these instructions and copies nothing.
+- `pnpm contracts:generate-lock` exists for the backend's sync to write the lock file. Never run it by hand.
+- `pnpm contracts:check` fails if a contract was edited, is missing, or is not in the lock, **and** if a file lacks the `// Generated from magica-backend` header or has a relative import ending in `.js`. Next.js can't resolve `./x.js` to `x.ts` when building, while `tsc` and the tests can, so without this check a bad copy would only fail at deploy. `pnpm build` runs the check first.
+
 ## Getting Started
 
 First, run the development server:
