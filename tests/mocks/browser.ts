@@ -1,6 +1,6 @@
 import { setupWorker } from "msw/browser";
 import { handlers } from "./handlers";
-import { addLongChat, getMockDb, setMockDb, type MockDb } from "./fixtures";
+import { addLongChat, addRetryChat, getMockDb, setMockDb, type MockDb } from "./fixtures";
 
 // The mock backend's data lives in this tab's session storage, so reloading mid-run finds the same run
 // (and the same tasks). Closing the tab starts fresh.
@@ -17,7 +17,10 @@ function load(): MockDb | null {
 
 const saved = load();
 if (saved) setMockDb(saved);
-else addLongChat();
+else {
+  addLongChat();
+  addRetryChat();
+}
 
 export const worker = setupWorker(...handlers);
 

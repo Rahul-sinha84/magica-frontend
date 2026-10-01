@@ -8,6 +8,7 @@ import {
   ErrorCodeSchema,
   MessageListResponseSchema,
   ModelsResponseSchema,
+  RetryRunResponseSchema,
   SendMessageResponseSchema,
 } from "@/contracts";
 import { BACKEND_URL } from "./config";
@@ -154,6 +155,8 @@ export function createApi(getToken: GetToken, { timeoutMs = 30_000 } = {}) {
       getActive: (chatId: string, signal?: AbortSignal) =>
         json(`/api/chats/${enc(chatId)}/active-run`, ActiveRunResponseSchema, { signal }),
       cancel: (runId: string) => empty(`/api/runs/${enc(runId)}/cancel`, { method: "POST" }),
+      // answers the same question again as a new turn; 201 for a new retry, 200 if it had already started
+      retry: (runId: string) => json(`/api/runs/${enc(runId)}/retry`, RetryRunResponseSchema, { method: "POST" }),
     },
     credits: {
       get: (signal?: AbortSignal) => json("/api/credits", CreditsResponseSchema, { signal }),

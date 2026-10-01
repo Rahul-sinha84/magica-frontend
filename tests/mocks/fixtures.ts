@@ -105,6 +105,25 @@ export const resetMockDb = () => {
   db = createMockDb();
 };
 
+// A task whose latest reply failed, for trying out Retry in the browser mock (and in tests that want one).
+// Not part of the default data, so lists in tests stay small. The mock backend works `canRetry` out itself on
+// every read; it is set here too so the fixture says what it is.
+export function addRetryChat(target: MockDb = db) {
+  const id = "chat-failed";
+  target.chats.unshift(chat(id, "A reply that failed", 1));
+  target.messages[id] = [
+    message("m-failed-1", id, "USER", "Summarise today's news in two lines", [], minutesAgo(2)),
+    {
+      ...message("m-failed-2", id, "ASSISTANT", "", [], minutesAgo(1)),
+      status: "FAILED",
+      agentRunId: "run-failed",
+      errorMessage: "The agent couldn't start in time. Please try again.",
+      canRetry: true,
+    },
+  ];
+  target.runs[id] = { id: "run-failed", chatId: id, triggerRunId: "trigger-run-failed", status: "FAILED", startedAt: minutesAgo(2), completedAt: minutesAgo(1) };
+}
+
 // A 240-message task, for trying out long histories and scrolling up in the browser mock. Not part of
 // the default data, so lists in tests stay small.
 export function addLongChat(target: MockDb = db) {

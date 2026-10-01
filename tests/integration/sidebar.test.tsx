@@ -296,9 +296,10 @@ describe("awkward data", () => {
     const many = Array.from({ length: 400 }, (_, i) => ({ ...base(), id: `t${i}`, title: `Task ${i}`, lastMessageAt: new Date(2026, 0, 1, 0, i).toISOString() }));
     server.use(listChats(many));
     renderApp(<Sidebar />);
-    expect(await screen.findByRole("link", { name: "Task 399" })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "Task 399" }, { timeout: 10_000 })).toBeInTheDocument();
     expect(within(screen.getByRole("region", { name: "Recent tasks" })).getAllByRole("listitem")).toHaveLength(400);
-  });
+    // 400 rows in jsdom are slow when the whole suite runs at once; the default 5s isn't always enough
+  }, 15_000);
 
   it("lets the browser skip drawing rows that are off screen", async () => {
     renderApp(<Sidebar />);

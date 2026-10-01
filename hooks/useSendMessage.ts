@@ -22,7 +22,8 @@ import { useApi } from "./useApi";
 const isAmbiguous = (error: unknown) =>
   error instanceof ApiError && [0, 502, 504, 422].includes(error.status);
 
-function explain(error: ApiError) {
+// What to tell the user when the server turns a message (or a retry) down.
+export function explain(error: ApiError) {
   switch (error.code) {
     case "INSUFFICIENT_CREDITS":
       return "You don't have enough credits for this.";

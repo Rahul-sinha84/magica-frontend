@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createApi } from "@/lib/api";
 import { BACKEND_URL } from "@/lib/config";
 import { ApiError } from "@/lib/queryClient";
-import { getMockDb } from "../mocks/fixtures";
+import { addRetryChat, getMockDb } from "../mocks/fixtures";
 import { MOCK_REPLY, RUN_MS } from "../mocks/handlers";
 import { server } from "../mocks/server";
 
@@ -501,5 +501,50 @@ describe("what the backend refuses to accept", () => {
   it("rejects attachments that aren't http(s) links", async () => {
     server.use(http.post(at("/api/chats/:chatId/messages"), () => HttpResponse.json({ error: "bad", code: "VALIDATION_FAILED" }, { status: 400 })));
     expect(await failure(api.messages.send("chat-greeting", { content: "hi", clientMessageId: uuid(), attachments: ["javascript:alert(1)"] }))).toMatchObject({ status: 400 });
+  });
+});
+
+describe("retrying a reply (mock backend, matching the backend's rules)", () => {
+  const rawRetry = (runId: string) =>
+    fetch(`${BACKEND_URL}/api/runs/${runId}/retry`, { method: "POST", headers: { Authorization: "Bearer test-token" } });
+
+  it("starts a new run for the latest failed reply (201), and answers a repeat with the same run (200)", async () => {
+    addRetryChat(getMockDb());
+    const first = await rawRetry("run-failed");
+    expect(first.status).toBe(201);
+    const again = await rawRetry("run-failed");
+    expect(again.status).toBe(200);
+    const [a, b] = [await first.json(), await again.json()];
+    expect(b.runId).toBe(a.runId);
+    // the question is answered again; no new message is created
+    expect(a.message.content).toBe("Summarise today's news in two lines");
+    expect(getMockDb().messages["chat-failed"]).toHaveLength(2);
+  });
+
+  it("parses the answer with the contract", async () => {
+    addRetryChat(getMockDb());
+    const response = await api.runs.retry("run-failed");
+    expect(response).toMatchObject({ chatId: "chat-failed", realtimeToken: "mock-realtime-token" });
+  });
+
+  it("marks only the latest failed reply as retryable, and not while a run is going", async () => {
+    addRetryChat(getMockDb());
+    const before = await api.messages.list("chat-failed");
+    expect(before.messages.map((m) => m.canRetry)).toEqual([false, true]);
+    await api.runs.retry("run-failed");
+    const during = await api.messages.list("chat-failed");
+    expect(during.messages.every((m) => !m.canRetry)).toBe(true);
+  });
+
+  it("refuses with the backend's codes", async () => {
+    addRetryChat(getMockDb());
+    // a reply that isn't failed or stopped
+    await expect(api.runs.retry("run-nope")).rejects.toMatchObject({ status: 404 });
+    getMockDb().messages["chat-greeting"][1].agentRunId = "run-done";
+    await expect(api.runs.retry("run-done")).rejects.toMatchObject({ status: 409, code: "RUN_NOT_RETRYABLE" });
+    // something is already running in the chat
+    const now = new Date().toISOString();
+    getMockDb().runs["chat-failed"] = { id: "run-busy", chatId: "chat-failed", triggerRunId: null, status: "RUNNING", startedAt: now, completedAt: null };
+    await expect(api.runs.retry("run-failed")).rejects.toMatchObject({ status: 409, code: "RUN_ACTIVE" });
   });
 });

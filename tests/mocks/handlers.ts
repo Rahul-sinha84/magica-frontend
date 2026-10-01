@@ -96,6 +96,19 @@ function settleRun(chatId: string) {
   return run;
 }
 
+// Like the backend: only the chat's latest turn can be retried, and only when its reply failed or was
+// stopped and nothing is running. Worked out on every read, so it always matches the current state.
+function withRetry(chatId: string): Message[] {
+  const db = getMockDb();
+  const all = db.messages[chatId] ?? [];
+  const last = all.at(-1);
+  const running = db.runs[chatId]?.status === "RUNNING";
+  return all.map((message) => ({
+    ...message,
+    canRetry: !running && message === last && message.role === "ASSISTANT" && (message.status === "FAILED" || message.status === "CANCELLED"),
+  }));
+}
+
 const tokenExpiry = () => new Date(Date.now() + 5 * 60_000).toISOString();
 
 export const handlers = [
@@ -156,7 +169,7 @@ export const handlers = [
     if (!query.success) return fail(400, "VALIDATION_FAILED", query.error.issues[0].message);
 
     settleRun(chatId);
-    const all = getMockDb().messages[chatId];
+    const all = withRetry(chatId);
     // the cursor is the index of the oldest message already sent; pages run back in time
     const end = Number(query.data.cursor ?? all.length);
     const start = Math.max(0, end - query.data.limit);
@@ -253,6 +266,33 @@ export const handlers = [
       agentRunId: run.id,
     });
     return new HttpResponse(null, { status: 204 });
+  }),
+
+  // Answers the same question again as a new turn that streams through the polling path. A repeated request
+  // for the same failed reply (a double click) gets the first answer back with 200, as the backend does.
+  http.post(url("/api/runs/:runId/retry"), ({ request, params }) => {
+    if (!isAuthed(request)) return unauthorized();
+    const db = getMockDb();
+    const runId = params.runId as string;
+    const chatId = Object.keys(db.messages).find((id) => db.messages[id].some((m) => m.role === "ASSISTANT" && m.agentRunId === runId));
+    if (!chatId || !db.chats.some((chat) => chat.id === chatId)) return notFound("Run");
+
+    const replay = db.sent[`retry:${runId}`];
+    if (replay) return HttpResponse.json(replay, { status: 200 });
+    if (settleRun(chatId)?.status === "RUNNING") return fail(409, "RUN_ACTIVE", "A response is already being generated");
+    const last = db.messages[chatId].at(-1);
+    const retryable = last?.role === "ASSISTANT" && last.agentRunId === runId && (last.status === "FAILED" || last.status === "CANCELLED");
+    if (!retryable) return fail(409, "RUN_NOT_RETRYABLE", "Only the latest failed or stopped reply can be retried");
+
+    const now = new Date().toISOString();
+    const newRunId = newId("run");
+    const triggerRunId = `trigger-${newRunId}`;
+    db.runs[chatId] = { id: newRunId, chatId, triggerRunId, status: "RUNNING", startedAt: now, completedAt: null };
+    // the question that is answered again: no new message is created
+    const question = [...db.messages[chatId]].reverse().find((m) => m.role === "USER")!;
+    const response = { message: question, chatId, runId: newRunId, triggerRunId, realtimeToken: "mock-realtime-token", realtimeTokenExpiresAt: tokenExpiry() };
+    db.sent[`retry:${runId}`] = response;
+    return HttpResponse.json(response, { status: 201 });
   }),
 
   http.get(url("/api/models"), ({ request }) => {
