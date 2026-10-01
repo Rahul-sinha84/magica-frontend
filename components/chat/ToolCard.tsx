@@ -1,12 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCircle2, ChevronRight, Clock, Loader2, Sparkles, Wrench, XCircle, Zap, type LucideIcon } from "lucide-react";
-import { toolDetails } from "@/lib/blocks";
-import { cn, formatCredits, formatDuration, toolLabel } from "@/lib/utils";
+import { CheckCircle2, ChevronRight, Clock, Crop, FileText, Film, Loader2, Sparkles, Wrench, XCircle, Zap, type LucideIcon } from "lucide-react";
+import { toolDetails, toolOneLiner, toolTitle, type ToolOutput } from "@/lib/blocks";
+import { cn, formatCredits, formatDuration } from "@/lib/utils";
 import type { ToolCallBlock, ToolResultBlock } from "@/types";
 
 const ICONS: Record<string, { Icon: LucideIcon; className: string }> = {
+  // the backend's tools
+  load_skill: { Icon: Zap, className: "text-amber-500" },
+  read_skill_asset: { Icon: FileText, className: "text-amber-500" },
+  gpt_image_2: { Icon: Sparkles, className: "text-icon-primary" },
+  crop_image: { Icon: Crop, className: "text-icon-primary" },
+  merge_videos: { Icon: Film, className: "text-icon-primary" },
+  // older names, still found in saved replies
   skill: { Icon: Zap, className: "text-amber-500" },
   model_schema: { Icon: Wrench, className: "text-blue-500" },
   ai_generation: { Icon: Sparkles, className: "text-icon-primary" },
@@ -19,26 +26,50 @@ const STATUS = {
   failed: { label: "Failed", icon: <XCircle className="size-3.5 text-destructive" /> },
 } as const;
 
+// What a step made: a video plays in place, a picture shows as a preview, and several pictures show as a
+// row of thumbnails.
+function Output({ output }: { output: ToolOutput }) {
+  if (output.kind === "video") {
+    return <video src={output.url} controls preload="metadata" aria-label="Output of this step" className="max-h-60 w-full max-w-full rounded-lg bg-surface-primary" />;
+  }
+  if (output.thumbnails.length > 1) {
+    return (
+      <ul className="flex flex-wrap gap-2">
+        {output.thumbnails.map((url, i) => (
+          <li key={url}>
+            {/* eslint-disable-next-line @next/next/no-img-element -- generated pictures come from anywhere */}
+            <img src={url} alt={`Output ${i + 1} of this step`} loading="lazy" className="size-16 rounded-md bg-surface-primary object-cover" />
+          </li>
+        ))}
+      </ul>
+    );
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element -- generated pictures come from anywhere
+    <img src={output.url} alt="Output of this step" loading="lazy" className="max-h-60 w-auto max-w-full rounded-lg" />
+  );
+}
+
 // One step of an agent's work: what it was, whether it worked, how long it took; open it for the details.
 export function ToolCard({ call, result }: { call: ToolCallBlock; result?: ToolResultBlock }) {
   const [open, setOpen] = useState(false);
   const { Icon, className } = ICONS[call.toolName] ?? { Icon: Wrench, className: "text-icon-secondary" };
-  const { rows, outputUrl, error } = toolDetails(call, result);
-  // a skill is one line: the name of the skill is all there is to say
-  const skillName = call.toolName === "skill" && typeof call.toolInput.name === "string" ? call.toolInput.name : null;
-  const expandable = !skillName && (rows.length > 0 || !!outputUrl || !!error);
+  const { rows, output, error } = toolDetails(call, result);
+  // loading a skill, or reading one of its files, is one line: there is nothing more to see
+  const oneLiner = toolOneLiner(call);
+  const expandable = !oneLiner && (rows.length > 0 || !!output || !!error);
   const status = STATUS[call.status];
 
   const header = (
     <>
       <Icon className={cn("size-5 shrink-0", className)} aria-hidden="true" />
-      <span className="text-sm font-medium text-text-primary">{toolLabel(call.toolName)}</span>
-      {skillName && <span className="min-w-0 truncate text-sm text-text-secondary">{skillName}</span>}
-      <span className="inline-flex" role="img" aria-label={status.label}>
+      <span className="shrink-0 text-sm font-medium text-text-primary">{toolTitle(call.toolName)}</span>
+      {oneLiner && <span className="min-w-0 truncate text-sm text-text-secondary">{oneLiner}</span>}
+      <span className="inline-flex shrink-0" role="img" aria-label={status.label}>
         {status.icon}
       </span>
       {call.durationMs !== undefined && (
-        <span className="inline-flex items-center gap-1 font-mono text-xs text-text-secondary">
+        <span className="inline-flex shrink-0 items-center gap-1 font-mono text-xs text-text-secondary">
           <Clock className="size-3" aria-hidden="true" />
           {formatDuration(call.durationMs)}
         </span>
@@ -67,6 +98,13 @@ export function ToolCard({ call, result }: { call: ToolCallBlock; result?: ToolR
         <div className="flex w-full items-center gap-2">{header}</div>
       )}
 
+      {/* a one-line step that failed still says why */}
+      {oneLiner && error && (
+        <p role="alert" className="ml-7 mt-1 text-[13px] text-destructive">
+          {error}
+        </p>
+      )}
+
       {expandable && open && (
         <div className="mt-2 overflow-hidden rounded-lg border border-line-tertiary text-[13px]">
           <dl>
@@ -78,11 +116,12 @@ export function ToolCard({ call, result }: { call: ToolCallBlock; result?: ToolR
             ))}
           </dl>
           {error && <p role="alert" className="border-t border-line-tertiary px-3 py-2 text-destructive">{error}</p>}
-          {outputUrl && (
+          {output && (
             <div className="flex gap-4 border-t border-line-tertiary px-3 py-2">
               <span className="w-24 shrink-0 text-text-secondary">Output</span>
-              {/* eslint-disable-next-line @next/next/no-img-element -- generated pictures come from anywhere */}
-              <img src={outputUrl} alt="Output of this step" loading="lazy" className="max-h-60 w-auto max-w-full rounded-lg" />
+              <div className="min-w-0 flex-1">
+                <Output output={output} />
+              </div>
             </div>
           )}
         </div>

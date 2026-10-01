@@ -36,6 +36,12 @@ export const StreamingMessage = memo(function StreamingMessage({ stream }: { str
         </p>
       )}
       {phase === "stopping" && <p className="mt-3 text-sm text-text-secondary">Stopping…</p>}
+      {phase !== "stopping" && stream.runningTool && (
+        // what the agent is doing right now, from the run's metadata; gone when the tool finishes
+        <p role="status" className="mt-3 text-sm text-text-secondary">
+          <span className="thinking-shimmer">Running {stream.runningTool}…</span>
+        </p>
+      )}
       {stream.reconnecting && (
         <p role="status" className="mt-3 text-sm text-text-secondary">
           Connection lost. Reconnecting…

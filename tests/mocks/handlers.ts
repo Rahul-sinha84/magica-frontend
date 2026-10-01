@@ -16,39 +16,133 @@ import { getMockDb, MOCK_AUDIO, MOCK_USER_ID } from "./fixtures";
 export const RUN_MS = 4000;
 export const MOCK_REPLY = "Sure! This answer comes from the mock backend, so you can see how a run streams in.";
 
-// A message asking for a picture gets one in the mock, so the side panel can be tried out; one asking for
-// audio gets a short clip.
+// What the last question asked for decides what a mock run does, so each kind of tool can be tried out:
+// a picture (gpt_image_2), a crop (crop_image), a merge (merge_videos, which ends with no text: the video is
+// the answer), a failing step ("fail"), or a sound clip.
 const lastAsk = (chatId: string) => [...(getMockDb().messages[chatId] ?? [])].reverse().find((m) => m.role === "USER")?.content ?? "";
-const wantsImage = (chatId: string) => /\b(image|picture|draw|photo)\b/i.test(lastAsk(chatId));
-const wantsAudio = (chatId: string) => /\b(audio|sound|voice|music|song)\b/i.test(lastAsk(chatId));
 
+export interface MockAsk {
+  image: boolean;
+  crop: boolean;
+  merge: boolean;
+  fail: boolean;
+  audio: boolean;
+}
+
+export function mockAsk(chatId: string): MockAsk {
+  const text = lastAsk(chatId);
+  return {
+    image: /\b(image|picture|draw|photo|poster)\b/i.test(text),
+    crop: /\bcrop/i.test(text),
+    merge: /\b(merge|clips?|videos?)\b/i.test(text),
+    fail: /\bfail/i.test(text),
+    audio: /\b(audio|sound|voice|music|song)\b/i.test(text),
+  };
+}
 
 const MOCK_IMAGE: ContentBlock = {
   type: "image",
   url: "/mock/red-apple.svg",
   altText: "A red apple",
   prompt: "A single red apple on a white table, soft light",
-  model: "gpt-image-2.5-flare-text",
+  model: "GPT Image 2",
   width: 1024,
   height: 1024,
 };
 
-// What a mock run has produced after `progress` (0 to 1) of its time: a short think, one step that runs
-// and then finishes, then the reply text growing (and, when asked for, a picture near the end). The saved
-// reply is the same blocks at 1.
-export function mockRunBlocks(progress: number, { image = false, audio = false } = {}): ContentBlock[] {
+// The one media step a mock run takes, if any: its tool, display input and result, and what it streams.
+function mediaStep(ask: MockAsk) {
+  if (ask.merge) {
+    return {
+      toolName: "merge_videos",
+      skill: "video-editing",
+      toolInput: { video_urls: ["https://cdn.example.com/clip-1.mp4", "https://cdn.example.com/clip-2.mp4"], transition: "fade" },
+      result: { url: "/mock/merged.webm", mimeType: "video/webm", durationMs: 3500, width: 320, height: 180 },
+      asset: { type: "video", url: "/mock/merged.webm", mimeType: "video/webm", altText: "The two clips, merged", model: "Merge Videos", width: 320, height: 180 } as ContentBlock,
+      creditCost: 40_000,
+    };
+  }
+  if (ask.crop) {
+    return {
+      toolName: "crop_image",
+      skill: "image-generation",
+      toolInput: { image_url: "https://cdn.example.com/red-apple.png", x_percent: 25, y_percent: 25, width_percent: 50, height_percent: 50 },
+      result: { url: "/mock/red-apple.svg", width: 512, height: 512 },
+      asset: { type: "image", url: "/mock/red-apple.svg", altText: "The apple, cropped", model: "Crop Image", width: 512, height: 512 } as ContentBlock,
+      creditCost: 10_000,
+    };
+  }
+  if (ask.image || ask.fail) {
+    return {
+      toolName: "gpt_image_2",
+      skill: "image-generation",
+      toolInput: { mode: "text", prompt: "A single red apple on a white table, soft light", size: "1024x1024", quality: "medium" },
+      result: { url: "/mock/red-apple.svg", width: 1024, height: 1024, mimeType: "image/svg+xml" },
+      asset: MOCK_IMAGE,
+      creditCost: 70_000,
+    };
+  }
+  return null;
+}
+
+export const MOCK_TOOL_ERROR = "The image service didn't answer in time. Please try again.";
+
+// What a mock run has produced after `progress` (0 to 1) of its time, in the order the backend streams it:
+// a short think, a skill load, then (when asked) a media step and its asset, then the reply text growing.
+// The saved reply is the same blocks at 1.
+export function mockRunBlocks(progress: number, ask: Partial<MockAsk> = {}): ContentBlock[] {
   const blocks: ContentBlock[] = [];
   if (progress < 0.1) return blocks;
   blocks.push({ type: "thinking", content: "The user wants a quick answer. Keep it short.", ...(progress >= 0.25 && { durationMs: 900 }) });
   if (progress < 0.25) return blocks;
-  const done = progress >= 0.45;
-  blocks.push({ type: "tool_call", toolCallId: "mock-step", toolName: "skill", toolInput: { name: "writing" }, status: done ? "completed" : "running", ...(done && { durationMs: 1200 }) });
-  if (done) blocks.push({ type: "tool_result", toolCallId: "mock-step", toolName: "skill", result: { ok: true }, isError: false });
-  const text = MOCK_REPLY.slice(0, Math.floor(MOCK_REPLY.length * Math.max(0, (progress - 0.5) / 0.5)));
-  if (text) blocks.push({ type: "text", content: text });
-  if (image && progress >= 0.8) blocks.push(MOCK_IMAGE);
-  if (audio && progress >= 0.8) blocks.push(MOCK_AUDIO);
+
+  const full: MockAsk = { image: false, crop: false, merge: false, fail: false, audio: false, ...ask };
+  const media = mediaStep(full);
+  const skill = media?.skill ?? "writing";
+  const skillDone = progress >= 0.35;
+  blocks.push({ type: "tool_call", toolCallId: "s1-MockSkill1", toolName: "load_skill", toolInput: { name: skill }, status: skillDone ? "completed" : "running", ...(skillDone && { durationMs: 1200 }) });
+  if (skillDone) blocks.push({ type: "tool_result", toolCallId: "s1-MockSkill1", toolName: "load_skill", result: { skill, loaded: true }, isError: false });
+
+  if (media && skillDone) {
+    const done = progress >= 0.55;
+    const failed = done && full.fail;
+    blocks.push({
+      type: "tool_call",
+      toolCallId: "s1-MockMedia1",
+      toolName: media.toolName,
+      toolInput: media.toolInput,
+      status: !done ? "running" : failed ? "failed" : "completed",
+      ...(done && { durationMs: 2600 }),
+      ...(done && !failed && { creditCost: media.creditCost }),
+    });
+    if (failed) blocks.push({ type: "tool_result", toolCallId: "s1-MockMedia1", toolName: media.toolName, isError: true, errorMessage: MOCK_TOOL_ERROR });
+    else if (done) {
+      blocks.push({ type: "tool_result", toolCallId: "s1-MockMedia1", toolName: media.toolName, result: media.result, isError: false });
+      blocks.push(media.asset);
+    }
+  }
+
+  // a merge ends on its video, with no final text
+  if (!(full.merge && !full.fail)) {
+    // at the end the whole reply (floating point would otherwise leave it a character short)
+    const share = progress >= 1 ? 1 : Math.max(0, (progress - 0.55) / 0.45);
+    const text = MOCK_REPLY.slice(0, Math.floor(MOCK_REPLY.length * share));
+    if (text) blocks.push({ type: "text", content: text });
+  }
+  if (full.audio && progress >= 0.8) blocks.push(MOCK_AUDIO);
   return blocks;
+}
+
+// Like the backend: a turn stopped mid-tool shows that tool as failed, with "Stopped.".
+function stopTools(blocks: ContentBlock[]): ContentBlock[] {
+  const out: ContentBlock[] = [];
+  for (const block of blocks) {
+    if (block.type === "tool_call" && (block.status === "running" || block.status === "pending")) {
+      out.push({ ...block, status: "failed" });
+      out.push({ type: "tool_result", toolCallId: block.toolCallId, toolName: block.toolName, isError: true, errorMessage: "Stopped." });
+    } else out.push(block);
+  }
+  return out;
 }
 
 const url = (path: string) => `${BACKEND_URL}${path}`;
@@ -81,12 +175,14 @@ function settleRun(chatId: string) {
   const now = new Date().toISOString();
   run.status = "COMPLETED";
   run.completedAt = now;
+  const blocks = mockRunBlocks(1, mockAsk(chatId));
   db.messages[chatId].push({
     id: newId("m"),
     chatId,
     role: "ASSISTANT",
-    content: MOCK_REPLY,
-    contentBlocks: mockRunBlocks(1, { image: wantsImage(chatId), audio: wantsAudio(chatId) }),
+    // a reply that ended on its tools' results has no text
+    content: blocks.map((block) => (block.type === "text" ? block.content : "")).join(""),
+    contentBlocks: blocks,
     status: "COMPLETED",
     createdAt: now,
     agentRunId: run.id,
@@ -231,7 +327,7 @@ export const handlers = [
     }
     // text grows with elapsed time, like a real stream would
     const progress = Math.min(1, (Date.now() - Date.parse(run.startedAt)) / RUN_MS);
-    const partialBlocks = mockRunBlocks(progress, { image: wantsImage(chatId), audio: wantsAudio(chatId) });
+    const partialBlocks = mockRunBlocks(progress, mockAsk(chatId));
     const partialText = partialBlocks.map((block) => (block.type === "text" ? block.content : "")).join("") || null;
     return HttpResponse.json({
       run,
@@ -252,7 +348,7 @@ export const handlers = [
     if (run.status !== "RUNNING") return notFound("Active run");
     // like the backend: the run ends at once and whatever was written so far is kept, marked as stopped
     const now = new Date().toISOString();
-    const partial = mockRunBlocks((Date.now() - Date.parse(run.startedAt ?? now)) / RUN_MS, { image: wantsImage(run.chatId), audio: wantsAudio(run.chatId) });
+    const partial = stopTools(mockRunBlocks((Date.now() - Date.parse(run.startedAt ?? now)) / RUN_MS, mockAsk(run.chatId)));
     run.status = "CANCELLED";
     run.completedAt = now;
     getMockDb().messages[run.chatId]?.push({

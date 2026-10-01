@@ -1,5 +1,5 @@
-import { blocksToText } from "@/contracts";
-import { formatCredits, toolLabel } from "@/lib/utils";
+import { blocksToText, TOOL_LABELS } from "@/contracts";
+import { formatCredits, safeAssetUrl, toolLabel } from "@/lib/utils";
 import type { ContentBlock, Message, ToolCallBlock, ToolResultBlock } from "@/types";
 
 export type Segment =
@@ -62,6 +62,39 @@ function show(value: unknown) {
   return text.length > MAX_VALUE_LENGTH ? `${text.slice(0, MAX_VALUE_LENGTH)}…` : text;
 }
 
+// A tool's name as the UI shows it: the backend's label for its own tools, a readable version of anything else.
+export function toolTitle(name: string) {
+  return (TOOL_LABELS as Readonly<Record<string, string>>)[name] ?? toolLabel(name);
+}
+
+// Steps that are one line, with nothing to open: loading a skill ("image-generation") and reading one of its
+// files ("image-generation / examples/presets.md").
+export function toolOneLiner(call: ToolCallBlock): string | null {
+  const { name, skill, path } = call.toolInput;
+  if ((call.toolName === "load_skill" || call.toolName === "skill") && typeof name === "string") return name;
+  if (call.toolName === "read_skill_asset" && typeof skill === "string" && typeof path === "string") return `${skill} / ${path}`;
+  return null;
+}
+
+// What a media step made, ready to show: the main output, whether it is a video, and a thumbnail per picture
+// when it made several. Only addresses that are safe to load are kept.
+export interface ToolOutput {
+  url: string;
+  kind: "image" | "video";
+  thumbnails: string[];
+}
+
+function toolOutput(call: ToolCallBlock, output: Record<string, unknown> | null): ToolOutput | null {
+  const raw = OUTPUT_URL_KEYS.map((key) => output?.[key]).find((value): value is string => typeof value === "string");
+  const url = raw ? safeAssetUrl(raw) : null;
+  if (!url) return null;
+  const mimeType = typeof output?.mimeType === "string" ? output.mimeType : "";
+  const video = call.toolName === "merge_videos" || mimeType.startsWith("video/") || (raw === output?.videoUrl && raw !== output?.url);
+  const urls = Array.isArray(output?.urls) ? output.urls.filter((u): u is string => typeof u === "string") : [];
+  const thumbnails = urls.map(safeAssetUrl).filter((u): u is string => !!u);
+  return { url, kind: video ? "video" : "image", thumbnails: !video && thumbnails.length > 1 ? thumbnails : [] };
+}
+
 // What a step shows when it is opened: its inputs as label/value rows, what it cost, and what it made.
 export function toolDetails(call: ToolCallBlock, result?: ToolResultBlock) {
   const rows = Object.entries(call.toolInput)
@@ -70,6 +103,5 @@ export function toolDetails(call: ToolCallBlock, result?: ToolResultBlock) {
   if (call.creditCost) rows.push({ label: "Credits used", value: formatCredits(call.creditCost) });
 
   const output = result && !result.isError && typeof result.result === "object" && result.result !== null ? (result.result as Record<string, unknown>) : null;
-  const outputUrl = OUTPUT_URL_KEYS.map((key) => output?.[key]).find((value): value is string => typeof value === "string");
-  return { rows, outputUrl, error: result?.isError ? (result.errorMessage ?? "This step failed.") : undefined };
+  return { rows, output: toolOutput(call, output), error: result?.isError ? (result.errorMessage ?? "This step failed.") : undefined };
 }

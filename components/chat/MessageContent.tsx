@@ -170,7 +170,13 @@ export function MessageContent({
   createdAt,
 }: { blocks: readonly ContentBlock[]; thinkingActive?: boolean } & Origin) {
   const origin = { chatId, createdAt };
-  const segments = groupBlocks(blocks).filter((segment) => segment.kind === "steps" || segment.block.type !== "usage");
+  // usage only feeds the credits line, and a blank text block (a reply whose answer is the image its tools
+  // made) would only be an empty bubble
+  const segments = groupBlocks(blocks).filter(
+    (segment) =>
+      segment.kind === "steps" ||
+      (segment.block.type !== "usage" && !((segment.block.type === "text" || segment.block.type === "reasoning") && !segment.block.content.trim())),
+  );
   return (
     <div>
       {segments.map((segment, i) => {

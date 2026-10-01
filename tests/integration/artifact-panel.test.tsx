@@ -56,7 +56,7 @@ describe("the artifact panel", () => {
     expect(p.getByRole("heading", { name: "Image Preview" })).toBeInTheDocument();
     expect(p.getByRole("img", { name: "A red apple on a white table" })).toHaveAttribute("src", "/mock/red-apple.svg");
     expect(p.getByText(/A single fresh red apple/)).toBeInTheDocument();
-    expect(p.getByText("gpt-image-2.5-flare-text")).toBeInTheDocument();
+    expect(p.getByText("GPT Image 2")).toBeInTheDocument();
     expect(p.getByText("1024 X 1024")).toBeInTheDocument();
     expect(p.getByText("Generated in chat")).toBeInTheDocument();
     expect(p.getByText(/^\d{1,2}-[A-Z][a-z]+-\d{4}$/)).toBeInTheDocument();

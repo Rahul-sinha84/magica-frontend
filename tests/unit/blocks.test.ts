@@ -78,10 +78,10 @@ describe("toolDetails", () => {
 
   it("finds the output link and reports failures", () => {
     const ok = toolDetails(call("a"), { type: "tool_result", toolCallId: "a", toolName: "x", result: { imageUrl: "/i.png" }, isError: false });
-    expect(ok.outputUrl).toBe("/i.png");
+    expect(ok.output).toEqual({ url: "/i.png", kind: "image", thumbnails: [] });
     const bad = toolDetails(call("a"), { type: "tool_result", toolCallId: "a", toolName: "x", result: null, isError: true, errorMessage: "boom" });
     expect(bad.error).toBe("boom");
-    expect(bad.outputUrl).toBeUndefined();
+    expect(bad.output).toBeNull();
   });
 
   it("cuts very long values", () => {

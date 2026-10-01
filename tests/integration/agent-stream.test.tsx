@@ -277,3 +277,73 @@ describe("the worker's own status", () => {
     expect(useChatStore.getState().artifactPanel.isOpen).toBe(false);
   });
 });
+
+describe("the real tools while a reply is written", () => {
+  it("says which tool is running, from the run's metadata, and clears it when the tool finishes", async () => {
+    await startRun();
+    realtime.push({ type: "tool-start", toolCallId: "s1-AbC123xyz", toolName: "gpt_image_2", toolInput: { mode: "text", prompt: "a cat" } });
+    realtime.setRun({ status: "EXECUTING", metadata: { status: "working", currentTool: { name: "gpt_image_2", input: { prompt: "a cat" }, status: "running" } } });
+    expect(await screen.findByText("Running GPT Image 2…")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Working · 1 step/ })).toBeInTheDocument();
+
+    realtime.push({ type: "tool-end", toolCallId: "s1-AbC123xyz", status: "completed", durationMs: 30_000, creditCost: 70_000, result: { url: "https://cdn.example.com/cat.png", width: 1024, height: 1024 } });
+    realtime.setRun({ status: "EXECUTING", metadata: { status: "working" } });
+    await waitFor(() => expect(screen.queryByText(/^Running /)).not.toBeInTheDocument());
+    expect(screen.getByRole("button", { name: /Completed 1 step/ })).toBeInTheDocument();
+  });
+
+  it("names unknown tools readably", async () => {
+    await startRun();
+    realtime.setRun({ status: "EXECUTING", metadata: { status: "working", currentTool: { name: "upscale_video", input: {}, status: "running" } } });
+    expect(await screen.findByText("Running Upscale video…")).toBeInTheDocument();
+  });
+
+  it("a turn stopped mid-tool keeps that tool, shown as Failed with 'Stopped.'", async () => {
+    const view = renderApp(<ChatWindow chatId="chat-greeting" />);
+    await screen.findByText("Hi! What can I help you with today?");
+    await typeAndSend(view.user, box(), "draw an image of a cat");
+    await waitFor(() => expect(useChatStore.getState().runs["chat-greeting"]).toBeDefined());
+    realtime.failStream(); // follow the mock's saved progress
+    // the image step is running (the mock runs it from 35% to 55% of the turn)
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(Date.now() + RUN_MS * 0.45);
+    await view.user.click(await screen.findByRole("button", { name: "Stop response" }));
+    expect(await screen.findByText("Stopped")).toBeInTheDocument();
+
+    const saved = getMockDb().messages["chat-greeting"].at(-1)!;
+    const step = saved.contentBlocks.find((b) => b.type === "tool_call" && b.toolName === "gpt_image_2");
+    expect(step).toMatchObject({ status: "failed" });
+    expect(saved.contentBlocks).toContainEqual(expect.objectContaining({ type: "tool_result", isError: true, errorMessage: "Stopped." }));
+
+    await view.user.click(screen.getByRole("button", { name: /Completed 2 steps/ }));
+    await view.user.click(screen.getByRole("button", { name: /GPT Image 2/ }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Stopped.");
+  });
+});
+
+describe("mock mode looks like the real tools", () => {
+  it("a merge streams a video and ends with no text", async () => {
+    const { mockRunBlocks } = await import("../mocks/handlers");
+    const blocks = mockRunBlocks(1, { merge: true });
+    expect(blocks.filter((b) => b.type === "tool_call").map((b) => b.type === "tool_call" && b.toolName)).toEqual(["load_skill", "merge_videos"]);
+    expect(blocks).toContainEqual(expect.objectContaining({ type: "video", model: "Merge Videos" }));
+    expect(blocks.some((b) => b.type === "text")).toBe(false);
+  });
+
+  it("a failing step has isError and a safe message, and makes no asset", async () => {
+    const { mockRunBlocks, MOCK_TOOL_ERROR } = await import("../mocks/handlers");
+    const blocks = mockRunBlocks(1, { image: true, fail: true });
+    expect(blocks).toContainEqual(expect.objectContaining({ type: "tool_call", toolName: "gpt_image_2", status: "failed" }));
+    expect(blocks).toContainEqual(expect.objectContaining({ type: "tool_result", isError: true, errorMessage: MOCK_TOOL_ERROR }));
+    expect(blocks.some((b) => b.type === "image")).toBe(false);
+  });
+
+  it("an image request runs gpt_image_2 with the backend's result shape and streams the asset", async () => {
+    const { mockRunBlocks } = await import("../mocks/handlers");
+    const blocks = mockRunBlocks(1, { image: true });
+    expect(blocks).toContainEqual(
+      expect.objectContaining({ type: "tool_result", toolName: "gpt_image_2", result: expect.objectContaining({ url: expect.any(String), width: 1024, height: 1024, mimeType: expect.any(String) }) }),
+    );
+    expect(blocks).toContainEqual(expect.objectContaining({ type: "image", model: "GPT Image 2" }));
+  });
+});

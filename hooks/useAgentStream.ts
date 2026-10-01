@@ -7,6 +7,7 @@ import { REALTIME_ENABLED, TRIGGER_API_URL } from "@/lib/config";
 import { REALTIME_RETRY_MS, TOKEN_REFRESH_LEAD_MS } from "@/lib/timing";
 import { useChatStore } from "@/stores/chatStore";
 import type { AgentStreamMetadata, ContentBlock } from "@/types";
+import { toolTitle } from "@/lib/blocks";
 import { useRunWatcher } from "./useRunWatcher";
 
 // Trigger.dev statuses after which the run won't change again. Hearing one only makes us ask our server,
@@ -47,6 +48,8 @@ export interface AgentStream {
   live: boolean;
   // the server couldn't be reached on the last check; it keeps trying
   reconnecting: boolean;
+  // the tool working right now, by its display name ("GPT Image 2"), from the run's metadata; null between tools
+  runningTool: string | null;
 }
 
 // How far along a reply is: its pieces, and the text inside them.
@@ -165,5 +168,7 @@ export function useAgentStream(chatId: string): AgentStream | null {
         : blocks.length === 0 || metadata?.status === "thinking"
           ? "thinking"
           : "writing";
-  return { chatId, blocks, phase, live, reconnecting };
+  const tool = metadata?.currentTool;
+  const runningTool = tool && tool.status === "running" ? toolTitle(tool.name) : null;
+  return { chatId, blocks, phase, live, reconnecting, runningTool };
 }

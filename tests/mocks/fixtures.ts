@@ -16,31 +16,96 @@ const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000).
 const APPLE_PROMPT =
   "A single fresh red apple with a small stem and leaf, sitting on a clean white table, soft natural lighting, subtle shadow beneath the apple, minimalist composition, photorealistic";
 
+// The real tools, with the display inputs and results the backend streams for them.
 const appleBlocks: ContentBlock[] = [
-  { type: "tool_call", toolCallId: "tc-1", toolName: "skill", toolInput: { name: "image-generation" }, status: "completed", durationMs: 1700 },
-  { type: "tool_call", toolCallId: "tc-2", toolName: "skill", toolInput: { name: "prompt-writing" }, status: "completed", durationMs: 2000 },
-  { type: "tool_call", toolCallId: "tc-3", toolName: "model_schema", toolInput: { modelId: "gpt-image-2.5-flare-text" }, status: "completed", durationMs: 2900 },
+  { type: "tool_call", toolCallId: "s1-LoadSkill01", toolName: "load_skill", toolInput: { name: "image-generation" }, status: "completed", durationMs: 1700 },
+  { type: "tool_result", toolCallId: "s1-LoadSkill01", toolName: "load_skill", result: { skill: "image-generation", loaded: true }, isError: false },
   {
     type: "tool_call",
-    toolCallId: "tc-4",
-    toolName: "ai_generation",
-    toolInput: { model: "gpt-image-2.5-flare-text", prompt: APPLE_PROMPT, size: "1024×1024", quality: "High" },
+    toolCallId: "s1-ReadAsset01",
+    toolName: "read_skill_asset",
+    toolInput: { skill: "image-generation", path: "examples/presets.md" },
+    status: "completed",
+    durationMs: 400,
+  },
+  { type: "tool_result", toolCallId: "s1-ReadAsset01", toolName: "read_skill_asset", result: { skill: "image-generation", path: "examples/presets.md", characters: 1840 }, isError: false },
+  {
+    type: "tool_call",
+    toolCallId: "s1-GptImage01",
+    toolName: "gpt_image_2",
+    toolInput: { mode: "text", prompt: APPLE_PROMPT, size: "1024x1024", quality: "high" },
     status: "completed",
     durationMs: 34_700,
     creditCost: 70_000,
   },
-  { type: "tool_result", toolCallId: "tc-4", toolName: "ai_generation", result: { url: "/mock/red-apple.svg" }, isError: false },
-  { type: "text", content: "Here's your image: a red apple on a white table." },
+  {
+    type: "tool_result",
+    toolCallId: "s1-GptImage01",
+    toolName: "gpt_image_2",
+    result: { url: "/mock/red-apple.svg", width: 1024, height: 1024, mimeType: "image/svg+xml" },
+    isError: false,
+  },
   {
     type: "image",
     url: "/mock/red-apple.svg",
     altText: "A red apple on a white table",
     prompt: APPLE_PROMPT,
-    model: "gpt-image-2.5-flare-text",
+    model: "GPT Image 2",
     width: 1024,
     height: 1024,
   },
-  { type: "usage", inputTokens: 1200, outputTokens: 340, model: "gpt-image-2.5-flare-text", creditCost: 290_000 },
+  { type: "text", content: "Here's your image: a red apple on a white table." },
+  { type: "usage", inputTokens: 1200, outputTokens: 340, model: "openrouter/free", creditCost: 290_000 },
+];
+
+// A reply made only of tool work: a crop, a merge that made a video, and a step that failed. There is no
+// final text; the media is the answer.
+const toolsBlocks: ContentBlock[] = [
+  { type: "tool_call", toolCallId: "s1-LoadSkill02", toolName: "load_skill", toolInput: { name: "video-editing" }, status: "completed", durationMs: 900 },
+  { type: "tool_result", toolCallId: "s1-LoadSkill02", toolName: "load_skill", result: { skill: "video-editing", loaded: true }, isError: false },
+  {
+    type: "tool_call",
+    toolCallId: "s1-CropImage01",
+    toolName: "crop_image",
+    toolInput: { image_url: "https://cdn.example.com/red-apple.png", x_percent: 25, y_percent: 25, width_percent: 50, height_percent: 50 },
+    status: "completed",
+    durationMs: 2100,
+    creditCost: 10_000,
+  },
+  { type: "tool_result", toolCallId: "s1-CropImage01", toolName: "crop_image", result: { url: "/mock/red-apple.svg", width: 512, height: 512 }, isError: false },
+  {
+    type: "tool_call",
+    toolCallId: "s1-MergeVids01",
+    toolName: "merge_videos",
+    toolInput: { video_urls: ["https://cdn.example.com/clip-1.mp4", "https://cdn.example.com/clip-2.mp4"], transition: "fade" },
+    status: "completed",
+    durationMs: 8400,
+    creditCost: 40_000,
+  },
+  {
+    type: "tool_result",
+    toolCallId: "s1-MergeVids01",
+    toolName: "merge_videos",
+    result: { url: "/mock/merged.webm", mimeType: "video/webm", durationMs: 3500, width: 320, height: 180 },
+    isError: false,
+  },
+  {
+    type: "tool_call",
+    toolCallId: "s1-GptImage02",
+    toolName: "gpt_image_2",
+    toolInput: { mode: "text", prompt: "A poster for the merged clip", size: "1024x1536" },
+    status: "failed",
+    durationMs: 30_000,
+  },
+  {
+    type: "tool_result",
+    toolCallId: "s1-GptImage02",
+    toolName: "gpt_image_2",
+    isError: true,
+    errorMessage: "The image service didn't answer in time. Please try again.",
+  },
+  { type: "image", url: "/mock/red-apple.svg", altText: "The apple, cropped", model: "Crop Image", width: 512, height: 512 },
+  { type: "video", url: "/mock/merged.webm", mimeType: "video/webm", altText: "The two clips, merged", model: "Merge Videos", width: 320, height: 180 },
 ];
 
 function message(id: string, chatId: string, role: Message["role"], text: string, blocks: ContentBlock[], at: string): Message {
@@ -104,6 +169,17 @@ export const setMockDb = (next: MockDb) => {
 export const resetMockDb = () => {
   db = createMockDb();
 };
+
+// A task whose reply is only tool work (crop, merge, one failed step) and no text, to see how the real tools
+// look in the browser mock. Not part of the default data.
+export function addToolsChat(target: MockDb = db) {
+  const id = "chat-tools";
+  target.chats.unshift(chat(id, "Crop the apple and merge my clips", 3));
+  target.messages[id] = [
+    message("m-tools-1", id, "USER", "Crop the apple and merge my two clips", [], minutesAgo(4)),
+    { ...message("m-tools-2", id, "ASSISTANT", "", toolsBlocks, minutesAgo(3)), agentRunId: "run-tools" },
+  ];
+}
 
 // A task whose latest reply failed, for trying out Retry in the browser mock (and in tests that want one).
 // Not part of the default data, so lists in tests stay small. The mock backend works `canRetry` out itself on

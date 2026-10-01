@@ -6,3 +6,4 @@ export * from "./fold";
 export * from "./messages";
 export * from "./models";
 export * from "./runs";
+export * from "./tools";
