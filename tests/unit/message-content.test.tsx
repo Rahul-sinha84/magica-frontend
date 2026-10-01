@@ -59,6 +59,18 @@ describe("message content", () => {
     expect(screen.getByRole("link", { name: "tracker" })).toHaveAttribute("href", "https://evil.example/pixel.png?d=secret");
   });
 
+  it("fits a picture's box in 384 x 384 by its shape, as magica does", () => {
+    view([
+      { type: "image", url: "/square.png", altText: "Square", width: 1024, height: 1024 },
+      { type: "image", url: "/wide.png", altText: "Wide", width: 1600, height: 900 },
+      { type: "image", url: "/tall.png", altText: "Tall", width: 900, height: 1600 },
+    ]);
+    const box = (name: string) => screen.getByRole("button", { name: `Open ${name}` }).parentElement!;
+    expect(box("Square")).toHaveStyle({ width: "384px", height: "384px" });
+    expect(box("Wide")).toHaveStyle({ width: "384px", height: "216px" });
+    expect(box("Tall")).toHaveStyle({ width: "216px", height: "384px" });
+  });
+
   it("shows an image, and opens it in the panel on click", async () => {
     view([{ type: "image", url: "/mock/red-apple.svg", altText: "A red apple", width: 100, height: 50 }]);
     expect(screen.getByRole("img", { name: "A red apple" })).toHaveAttribute("src", "/mock/red-apple.svg");
@@ -154,6 +166,13 @@ describe("message", () => {
   it("shows a user's message as a pill with its text", () => {
     render(<Message message={message({ role: "USER", content: "hello there" })} pending={false} />);
     expect(screen.getByText("hello there")).toBeInTheDocument();
+  });
+
+  it("puts the time before the copy button under a user's message (magica)", () => {
+    const { container } = render(<Message message={message({ role: "USER", content: "hello there" })} pending={false} />);
+    const time = container.querySelector("time")!;
+    const copy = screen.getByRole("button", { name: "Copy" });
+    expect(time.compareDocumentPosition(copy) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("hides the actions on a message that is still being sent", () => {

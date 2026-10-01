@@ -16,11 +16,11 @@ function UserMessage({ message, pending }: { message: MessageData; pending: bool
         {message.content}
       </div>
       {!pending && (
-        <div className="mt-1 flex items-center gap-1.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover/message:opacity-100 [@media(hover:none)]:opacity-100">
-          {message.content && <CopyButton text={message.content} />}
-          <time dateTime={message.createdAt} className="text-xs font-medium text-text-secondary">
+        <div className="mt-1 flex items-center gap-1.5 transition-opacity focus-within:opacity-100 sm:opacity-0 sm:group-hover/message:opacity-100 [@media(hover:none)]:opacity-100">
+          <time dateTime={message.createdAt} className="text-xs font-medium text-text-primary">
             {formatMessageTime(message.createdAt)}
           </time>
+          {message.content && <CopyButton text={message.content} />}
         </div>
       )}
     </div>

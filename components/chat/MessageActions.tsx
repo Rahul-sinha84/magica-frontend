@@ -56,7 +56,7 @@ export function MessageActions({ message, latest = false }: { message: Message; 
         </p>
       )}
       <div className={cn("flex items-center gap-0.5", credits > 0 && "mt-1")}>
-        <div className="-ml-2.5 flex items-center gap-0.5">
+        <div className="flex items-center gap-0.5">
           <CopyButton text={text} />
           <button aria-label="Fork chat" className={button} {...inert}>
             <GitFork className="size-[18px]" />
@@ -68,7 +68,7 @@ export function MessageActions({ message, latest = false }: { message: Message; 
             <ThumbsDown className="size-[18px]" />
           </button>
         </div>
-        <time dateTime={message.createdAt} className="ml-4 text-xs font-medium">
+        <time dateTime={message.createdAt} className="ml-1.5 text-xs font-medium">
           {formatMessageTime(message.createdAt)}
         </time>
       </div>

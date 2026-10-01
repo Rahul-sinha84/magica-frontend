@@ -29,7 +29,7 @@ function Row({ icon, label, children }: { icon: ReactNode; label: string; childr
 }
 
 const actionButton =
-  "flex h-[42px] items-center justify-center gap-2 rounded-[10px] bg-surface-secondary px-3 text-sm text-text-primary outline-none transition-colors hover:bg-surface-tertiary focus-visible:ring-2 focus-visible:ring-ring";
+  "flex h-[42px] items-center justify-center gap-2 rounded-[10px] border border-line-tertiary bg-surface-secondary px-3 text-sm text-text-primary outline-none transition-colors hover:bg-surface-tertiary focus-visible:ring-2 focus-visible:ring-ring";
 
 function useCopy() {
   const [copied, setCopied] = useState<string | null>(null);
@@ -77,7 +77,7 @@ function Details({ artifact }: { artifact: Artifact }) {
   const created = createdAt ? formatPreviewDate(createdAt) : "";
 
   return (
-    <aside className="flex w-full shrink-0 flex-col justify-between gap-6 rounded-xl border border-line-tertiary bg-[#f8f8f8] p-4 md:m-5 md:w-[394px] dark:bg-surface-primary">
+    <aside className="flex w-full flex-1 shrink-0 flex-col justify-between gap-4 bg-[#f8f8f8] p-4 md:m-5 md:w-[394px] md:gap-6 md:rounded-xl md:border md:border-line-tertiary dark:bg-surface-primary">
       <div className="flex flex-col gap-3">
         {asset.prompt && (
           <div className="flex flex-col gap-2">
@@ -165,7 +165,8 @@ function Details({ artifact }: { artifact: Artifact }) {
 
 // magica's Image (or Video) Preview: a centered dialog over a blurred backdrop, the picture on the left and its
 // details on the right. It opens when a picture in the chat is clicked (never by itself), and closes with the
-// close button, Escape or a click outside. On a phone the details stack under the picture.
+// close button, Escape or a click outside. On a phone it is a sheet from the bottom, 95% of the screen tall:
+// the picture in the top part (at most 45% of the screen), and the details scrolling under it.
 export function ArtifactPanel() {
   const { isOpen, artifact } = useChatStore((s) => s.artifactPanel);
   const close = useChatStore((s) => s.closeArtifactPanel);
@@ -195,11 +196,11 @@ export function ArtifactPanel() {
             event.preventDefault();
             if (returnFocus.current?.isConnected) returnFocus.current.focus({ preventScroll: true });
           }}
-          className="fixed left-1/2 top-1/2 z-50 flex max-h-[calc(100dvh-32px)] w-[calc(100vw-32px)] max-w-[1248px] -translate-x-1/2 -translate-y-1/2 flex-col overflow-y-auto rounded-xl border border-line-tertiary bg-surface-main shadow-xl outline-none md:h-[700px] md:flex-row md:overflow-hidden data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95"
+          className="fixed inset-x-0 bottom-0 z-50 flex h-[95dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-line-tertiary bg-surface-main shadow-xl outline-none md:inset-x-auto md:bottom-auto md:left-1/2 md:top-1/2 md:h-[700px] md:max-h-[calc(100dvh-32px)] md:w-[calc(100vw-32px)] md:max-w-[1248px] md:-translate-x-1/2 md:-translate-y-1/2 md:flex-row md:rounded-xl data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95"
         >
           {artifact && (
             <>
-              <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+              <div className="flex max-h-[45dvh] min-h-0 min-w-0 shrink-0 flex-col md:max-h-none md:flex-1 md:shrink">
                 <div className="flex items-center gap-3 px-5 pt-5 md:px-9 md:pt-9">
                   <DialogPrimitive.Title className="min-w-0 flex-1 truncate text-base font-semibold leading-7 text-text-primary">{title}</DialogPrimitive.Title>
                   <button
@@ -213,16 +214,16 @@ export function ArtifactPanel() {
                   </button>
                   <DialogPrimitive.Close
                     aria-label="Close preview"
-                    className="flex size-[46px] items-center justify-center rounded-[10px] border border-line-tertiary bg-surface-primary text-text-primary outline-none hover:bg-surface-secondary focus-visible:ring-2 focus-visible:ring-ring"
+                    className="flex size-[46px] items-center justify-center rounded-[10px] border border-line-tertiary bg-surface-primary text-text-primary shadow-sm outline-none hover:bg-surface-secondary focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <X className="size-5" />
                   </DialogPrimitive.Close>
                 </div>
-                <div className="flex min-h-[240px] flex-1 items-center justify-center p-5 md:min-h-0 md:p-10">
+                <div className="flex min-h-0 flex-1 items-center justify-center p-3 md:p-10">
                   <Media key={artifact.asset.url} artifact={artifact} />
                 </div>
               </div>
-              <div className="flex px-5 pb-5 md:p-0">
+              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto border-t border-line-tertiary bg-[#f8f8f8] md:flex-none md:overflow-visible md:border-t-0 md:bg-transparent dark:bg-surface-primary md:dark:bg-transparent">
                 <Details artifact={artifact} />
               </div>
             </>

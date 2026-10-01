@@ -58,73 +58,73 @@ export function Sidebar() {
 
   return (
     <>
-      {mobileOpen && (
-        <div
-          aria-hidden="true"
-          className="fixed inset-0 z-30 bg-black/40 md:hidden"
-          onClick={() => setMobileOpen(false)}
-        />
-      )}
+      {/* on a phone, as on magica: the page stays as it is behind the drawer (nothing dims it), and a tap
+          outside the drawer closes it */}
+      {mobileOpen && <div aria-hidden="true" className="fixed inset-0 z-40 md:hidden" onClick={() => setMobileOpen(false)} />}
       <aside
         aria-label="Sidebar"
         inert={!isDesktop && !mobileOpen}
         className={cn(
-          "fixed inset-y-2 left-2 z-40 flex w-60 shrink-0 flex-col overflow-hidden rounded-3xl bg-surface-main-2 shadow-[inset_0_0_0_1px_var(--line-tertiary)] transition-[transform,width] duration-200 motion-reduce:transition-none md:static md:translate-x-0",
-          mobileOpen ? "translate-x-0" : "-translate-x-[calc(100%+1rem)]",
+          // a phone's drawer runs the full height of the left edge and opens by growing from nothing to 240px
+          "fixed inset-y-0 left-0 z-50 flex shrink-0 overflow-hidden rounded-3xl bg-surface-main-2 transition-[width] duration-200 motion-reduce:transition-none md:static md:z-auto md:w-60 md:shadow-[inset_0_0_0_1px_var(--line-tertiary)]",
+          mobileOpen ? "max-md:w-60 max-md:border-r max-md:border-line-tertiary" : "max-md:w-0",
           rail && "md:w-12",
         )}
       >
-        {rail ? (
-          <div className="flex flex-col items-center pt-2">
-            <button
-              type="button"
-              aria-label="Open sidebar"
-              onClick={toggle}
-              className="flex size-[34px] items-center justify-center rounded-lg outline-none hover:bg-surface-secondary focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <span className="block size-5 overflow-hidden">
-                <Wordmark />
-              </span>
-            </button>
-            <button type="button" aria-label="Search" title="Not available in this build" aria-disabled="true" className={cn(round, "mb-1 mt-4")}>
-              <Search className="size-4" />
-            </button>
-          </div>
-        ) : (
-          <div className="flex h-[52px] shrink-0 items-center justify-between pl-3 pr-2">
-            <Link
-              href="/chat"
-              aria-label="Start a new task"
-              className="flex h-8 w-[84px] items-center rounded-lg px-0.5 outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <Wordmark />
-            </Link>
-            <div className="flex items-center gap-0.5">
-              <button type="button" aria-label="Search" title="Not available in this build" aria-disabled="true" className={round}>
-                <Search className="size-4" />
-              </button>
+        {/* full width while the drawer grows, so nothing inside reflows */}
+        <div className="flex w-60 shrink-0 flex-col md:w-full">
+          {rail ? (
+            <div className="flex flex-col items-center pt-2">
               <button
                 type="button"
-                aria-label="Close sidebar"
-                onClick={isDesktop ? toggle : () => setMobileOpen(false)}
-                className={round}
+                aria-label="Open sidebar"
+                onClick={toggle}
+                className="flex size-[34px] items-center justify-center rounded-lg outline-none hover:bg-surface-secondary focus-visible:ring-2 focus-visible:ring-ring"
               >
-                <LayoutSidebarIcon className="size-4" />
+                <span className="block size-5 overflow-hidden">
+                  <Wordmark />
+                </span>
+              </button>
+              <button type="button" aria-label="Search" title="Not available in this build" aria-disabled="true" className={cn(round, "mb-1 mt-4")}>
+                <Search className="size-4" />
               </button>
             </div>
-          </div>
-        )}
-
-        {/* nav and tasks scroll together on short screens; the header and footer stay put */}
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          <SidebarNav rail={rail} />
-          {!rail && (
-            <div className="mt-2 px-2">
-              <SidebarTasks />
+          ) : (
+            <div className="flex h-[52px] shrink-0 items-center justify-between pl-3 pr-2">
+              <Link
+                href="/chat"
+                aria-label="Start a new task"
+                className="flex h-8 w-[84px] items-center rounded-lg px-0.5 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <Wordmark />
+              </Link>
+              <div className="flex items-center gap-0.5">
+                <button type="button" aria-label="Search" title="Not available in this build" aria-disabled="true" className={round}>
+                  <Search className="size-4" />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Close sidebar"
+                  onClick={isDesktop ? toggle : () => setMobileOpen(false)}
+                  className={round}
+                >
+                  <LayoutSidebarIcon className="size-4" />
+                </button>
+              </div>
             </div>
           )}
+
+          {/* nav and tasks scroll together on short screens; the header and footer stay put */}
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <SidebarNav rail={rail} />
+            {!rail && (
+              <div className="mt-2 px-2">
+                <SidebarTasks />
+              </div>
+            )}
+          </div>
+          <SidebarFooter rail={rail} />
         </div>
-        <SidebarFooter rail={rail} />
       </aside>
     </>
   );

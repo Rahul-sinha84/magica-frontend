@@ -12,7 +12,7 @@ export function ChatHeader({ showFiles = false, busy = false }: { showFiles?: bo
   const setSidebarOpen = useMobileSidebar((s) => s.setOpen);
 
   return (
-    <header className="flex h-[52px] shrink-0 items-center gap-1 pl-3 pr-3 md:pl-4 md:pr-6">
+    <header className="flex h-[52px] shrink-0 items-center gap-2 pl-4 pr-6">
       <button
         type="button"
         aria-label="Open sidebar"

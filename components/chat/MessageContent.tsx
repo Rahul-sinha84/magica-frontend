@@ -24,13 +24,16 @@ function Picture({ block, origin }: { block: ImageBlock; origin: Origin }) {
   const open = useChatStore((s) => s.openArtifactPanel);
   const src = safeAssetUrl(block.url);
   const [broken, setBroken] = useState(false);
+  // as on magica: a box that fits the picture's shape inside 384 x 384. On a narrow screen it gets narrower
+  // but keeps its height, and the picture sits inside it.
   const ratio = assetRatio(block.width, block.height, 1);
+  const box = ratio >= 1 ? { width: 384, height: Math.round(384 / ratio) } : { width: Math.round(384 * ratio), height: 384 };
   const label = block.altText ?? "Generated image";
   const overlayButton =
     "flex size-7 items-center justify-center rounded-[4px] bg-[rgba(10,10,11,0.5)] text-white outline-none hover:bg-[rgba(10,10,11,0.7)] focus-visible:ring-2 focus-visible:ring-white";
 
   return (
-    <div className="group/picture relative max-h-[512px] w-full max-w-[384px] overflow-hidden rounded-xl bg-surface-primary" style={{ aspectRatio: ratio }}>
+    <div className="group/picture relative max-w-full overflow-hidden rounded-xl bg-surface-primary" style={box}>
       {broken || !src ? (
         <div className="flex size-full flex-col items-center justify-center gap-2 text-sm text-text-secondary">
           <ImageOff className="size-6" aria-hidden="true" />
@@ -234,7 +237,7 @@ export function MessageContent({
       {visual.length > 0 && (
         <div className={cn("flex flex-wrap gap-2", gapAfter(last))}>
           {visual.map((block) => (
-            <div key={block.url} className="w-full max-w-[384px]">
+            <div key={block.url} className={block.type === "video" ? "w-full max-w-[384px]" : "max-w-full"}>
               <BlockView block={block} origin={origin} />
             </div>
           ))}

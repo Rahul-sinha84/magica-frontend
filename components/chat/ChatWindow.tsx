@@ -72,7 +72,7 @@ export function ChatWindow({ chatId }: { chatId: string }) {
           onLoadOlder={() => void fetchNextPage()}
         />
       )}
-      <div className="flex justify-center px-4 pb-2 pt-2">
+      <div className="flex justify-center px-2 pb-1 pt-2 sm:px-4 md:px-6 lg:px-8">
         <Composer
           value={text}
           onChange={(value) => setDraft(chatId, value)}
