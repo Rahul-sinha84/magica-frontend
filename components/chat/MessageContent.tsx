@@ -1,33 +1,16 @@
 "use client";
 
-import { useState } from "react";
-import { ChevronRight, Download, ImageOff, ImagePlus, Maximize2 } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
+import { Download, ImageOff, ImagePlus, Maximize2 } from "lucide-react";
 import { groupBlocks, type Segment } from "@/lib/blocks";
-import { assetRatio, cn, formatClipLength, formatDuration, safeAssetUrl } from "@/lib/utils";
+import { assetRatio, cn, formatClipLength, safeAssetUrl } from "@/lib/utils";
 import { useChatStore } from "@/stores/chatStore";
 import type { AudioBlock, ContentBlock, ImageBlock, VideoBlock } from "@/types";
-import { Markdown } from "./Markdown";
+import { Markdown, type PictureFor } from "./Markdown";
 import { StepGroup } from "./StepGroup";
 
 type Block = Extract<Segment, { kind: "block" }>["block"];
 
-function Thinking({ block, active }: { block: Extract<ContentBlock, { type: "thinking" }>; active: boolean }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div>
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
-        className="group flex items-center gap-1 rounded-md text-sm font-medium text-text-secondary outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        {block.durationMs ? `Thought for ${formatDuration(block.durationMs)}` : <span className={active ? "thinking-shimmer" : undefined}>Thinking</span>}
-        <ChevronRight className={cn("size-3.5 transition-transform", open && "rotate-90")} aria-hidden="true" />
-      </button>
-      {open && <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-text-secondary">{block.content}</p>}
-    </div>
-  );
-}
 
 // Pictures keep their shape while loading (the list measures rows, so a late image must not shove
 // everything below it), and a broken one says so instead of showing the browser's broken-image icon.
@@ -150,10 +133,10 @@ function Source({ url, title }: { url: string; title?: string | null }) {
   );
 }
 
-function BlockView({ block, thinkingActive, origin }: { block: Block; thinkingActive: boolean; origin: Origin }) {
+function BlockView({ block, origin, pictureFor }: { block: Block; origin: Origin; pictureFor?: PictureFor }) {
   switch (block.type) {
     case "text":
-      return <Markdown>{block.content}</Markdown>;
+      return <Markdown pictureFor={pictureFor}>{block.content}</Markdown>;
     case "reasoning":
       return (
         <div className="text-text-secondary">
@@ -161,7 +144,7 @@ function BlockView({ block, thinkingActive, origin }: { block: Block; thinkingAc
         </div>
       );
     case "thinking":
-      return <Thinking block={block} active={thinkingActive} />;
+      return null; // magica shows thinking only live, as the "Thinking" row; never in a reply
     case "image":
       return <Picture block={block} origin={origin} />;
     case "video":
@@ -175,8 +158,25 @@ function BlockView({ block, thinkingActive, origin }: { block: Block; thinkingAc
   }
 }
 
-// Everything in an assistant reply, top to bottom: text, steps, pictures, sources.
 const isMedia = (segment: Segment) => segment.kind === "block" && (segment.block.type === "image" || segment.block.type === "video" || segment.block.type === "audio");
+
+// a markdown image in the text: ![alt](address) or ![alt](<address> "title")
+const MARKDOWN_IMAGE = /!\[[^\]]*\]\(\s*<?([^\s)>]+)>?(?:\s+["'][^"']*["'])?\s*\)/g;
+
+// The reply's own pictures that its text also shows, by address. Only these are drawn from the text; any
+// other image address there stays a link.
+function picturesInText(blocks: readonly ContentBlock[]) {
+  const pictures = new Map(blocks.flatMap((block) => (block.type === "image" ? [[block.url, block] as const] : [])));
+  const found = new Map<string, ImageBlock>();
+  for (const block of blocks) {
+    if (block.type !== "text") continue;
+    for (const [, url] of block.content.matchAll(MARKDOWN_IMAGE)) {
+      const picture = pictures.get(url);
+      if (picture) found.set(url, picture);
+    }
+  }
+  return found;
+}
 
 // Everything in an assistant reply, laid out as magica does: the "Thinking" row, the steps, the text (and
 // anything else written), then the pictures, videos and audio the reply made, in one media area at the end.
@@ -184,21 +184,30 @@ const isMedia = (segment: Segment) => segment.kind === "block" && (segment.block
 // shown in the order it was streamed.
 export function MessageContent({
   blocks,
-  thinkingActive = false,
   chatId,
   createdAt,
-}: { blocks: readonly ContentBlock[]; thinkingActive?: boolean } & Origin) {
-  const origin = { chatId, createdAt };
-  // usage only feeds the credits line, and a blank text block (a reply whose answer is the image its tools
-  // made) would only be an empty bubble
+}: { blocks: readonly ContentBlock[] } & Origin) {
+  const origin = useMemo(() => ({ chatId, createdAt }), [chatId, createdAt]);
+  // Not shown: usage (it only feeds the credits line), thinking (magica shows it only live, as the
+  // "Thinking" row), and blank text (a reply whose answer is the image its tools made).
   const segments = groupBlocks(blocks).filter(
     (segment) =>
       segment.kind === "steps" ||
-      (segment.block.type !== "usage" && !((segment.block.type === "text" || segment.block.type === "reasoning") && !segment.block.content.trim())),
+      (segment.block.type !== "usage" &&
+        segment.block.type !== "thinking" &&
+        !((segment.block.type === "text" || segment.block.type === "reasoning") && !segment.block.content.trim())),
   );
+  // pictures this reply made that the model also put in its text (as markdown) show there, not again below
+  const inText = useMemo(() => picturesInText(blocks), [blocks]);
+  const pictureFor = useCallback<PictureFor>((src) => {
+    const block = inText.get(src);
+    return block ? <Picture block={block} origin={origin} /> : null;
+  }, [inText, origin]);
   const flow = segments.filter((segment) => !isMedia(segment));
   const media = segments.flatMap((segment) =>
-    segment.kind === "block" && (segment.block.type === "image" || segment.block.type === "video" || segment.block.type === "audio") ? [segment.block] : [],
+    segment.kind === "block" && (segment.block.type === "image" || segment.block.type === "video" || segment.block.type === "audio") && !inText.has(segment.block.url)
+      ? [segment.block]
+      : [],
   );
   const visual = media.filter((block): block is ImageBlock | VideoBlock => block.type !== "audio");
   const sounds = media.filter((block): block is AudioBlock => block.type === "audio");
@@ -218,7 +227,7 @@ export function MessageContent({
           </div>
         ) : (
           <div key={i} className={gapAfter(flow[i - 1])}>
-            <BlockView block={segment.block} thinkingActive={thinkingActive} origin={origin} />
+            <BlockView block={segment.block} origin={origin} pictureFor={pictureFor} />
           </div>
         ),
       )}
@@ -226,14 +235,14 @@ export function MessageContent({
         <div className={cn("flex flex-wrap gap-2", gapAfter(last))}>
           {visual.map((block) => (
             <div key={block.url} className="w-full max-w-[384px]">
-              <BlockView block={block} thinkingActive={thinkingActive} origin={origin} />
+              <BlockView block={block} origin={origin} />
             </div>
           ))}
         </div>
       )}
       {sounds.map((block, i) => (
         <div key={block.url} className={i === 0 && visual.length === 0 ? gapAfter(last) : "mt-4"}>
-          <BlockView block={block} thinkingActive={thinkingActive} origin={origin} />
+          <BlockView block={block} origin={origin} />
         </div>
       ))}
     </div>

@@ -35,7 +35,7 @@ export interface Artifact {
   asset: ImageBlock | VideoBlock;
   // when it was made (the message's time), if known
   createdAt: string | null;
-  // opened by a click (focus moves into the panel) or by a newly generated asset (focus stays put)
+  // how it was opened (magica only opens it from a click)
   openedBy: "user" | "stream";
 }
 
@@ -78,10 +78,6 @@ interface ChatStore {
 
   artifactPanel: ArtifactPanel;
   openArtifactPanel: (artifact: Artifact) => void;
-  // a picture or video a run just made opens by itself, once: closing it keeps it closed
-  showNewArtifact: (runId: string, artifact: Artifact) => void;
-  // which run's assets have already opened by themselves, by run id and address
-  shownArtifacts: Record<string, true>;
   closeArtifactPanel: () => void;
 }
 
@@ -132,38 +128,29 @@ export const useChatStore = create<ChatStore>()(
         set((s) => {
           const remaining = (s.optimistic[chatId] ?? []).filter((m) => m.clientMessageId !== clientMessageId);
           return { optimistic: remaining.length ? { ...s.optimistic, [chatId]: remaining } : without(s.optimistic, chatId) };
-    }),
+        }),
 
-  failedSends: {},
-  rememberFailedSend: (key, send) => set((s) => ({ failedSends: { ...s.failedSends, [key]: send } })),
-  forgetFailedSend: (key) => set((s) => ({ failedSends: without(s.failedSends, key) })),
+      failedSends: {},
+      rememberFailedSend: (key, send) => set((s) => ({ failedSends: { ...s.failedSends, [key]: send } })),
+      forgetFailedSend: (key) => set((s) => ({ failedSends: without(s.failedSends, key) })),
 
-  stopRequested: {},
-  requestStop: (chatId) => set((s) => ({ stopRequested: { ...s.stopRequested, [chatId]: true } })),
-  clearStopRequest: (chatId) => set((s) => ({ stopRequested: without(s.stopRequested, chatId) })),
+      stopRequested: {},
+      requestStop: (chatId) => set((s) => ({ stopRequested: { ...s.stopRequested, [chatId]: true } })),
+      clearStopRequest: (chatId) => set((s) => ({ stopRequested: without(s.stopRequested, chatId) })),
 
-  runs: {},
-  setRun: (chatId, run) => set((s) => ({ runs: { ...s.runs, [chatId]: run } })),
-  patchRun: (chatId, patch) => set((s) => (s.runs[chatId] ? { runs: { ...s.runs, [chatId]: { ...s.runs[chatId], ...patch } } } : s)),
-  // the run is over: whatever stop was waiting for it is done too
-  clearRun: (chatId) => set((s) => ({ runs: without(s.runs, chatId), stopping: without(s.stopping, chatId), stopRequested: without(s.stopRequested, chatId) })),
-  stopping: {},
-  setStopping: (chatId) => set((s) => (s.runs[chatId] ? { stopping: { ...s.stopping, [chatId]: true } } : s)),
-  clearStopping: (chatId) => set((s) => ({ stopping: without(s.stopping, chatId) })),
+      runs: {},
+      setRun: (chatId, run) => set((s) => ({ runs: { ...s.runs, [chatId]: run } })),
+      patchRun: (chatId, patch) => set((s) => (s.runs[chatId] ? { runs: { ...s.runs, [chatId]: { ...s.runs[chatId], ...patch } } } : s)),
+      // the run is over: whatever stop was waiting for it is done too
+      clearRun: (chatId) =>
+        set((s) => ({ runs: without(s.runs, chatId), stopping: without(s.stopping, chatId), stopRequested: without(s.stopRequested, chatId) })),
+      stopping: {},
+      setStopping: (chatId) => set((s) => (s.runs[chatId] ? { stopping: { ...s.stopping, [chatId]: true } } : s)),
+      clearStopping: (chatId) => set((s) => ({ stopping: without(s.stopping, chatId) })),
 
-  artifactPanel: CLOSED_PANEL,
-  openArtifactPanel: (artifact) => set({ artifactPanel: { isOpen: true, artifact } }),
-  shownArtifacts: {},
-  showNewArtifact: (runId, artifact) =>
-    set((s) => {
-      const key = `${runId}:${artifact.asset.url}`;
-      if (s.shownArtifacts[key]) return s;
-      // On a phone the panel covers the whole screen, so it doesn't open by itself there (it would cover
-      // the conversation mid-reply); the picture is in the reply, one tap away.
-      const wide = typeof window === "undefined" || !window.matchMedia || window.matchMedia("(min-width: 768px)").matches;
-      return { shownArtifacts: { ...s.shownArtifacts, [key]: true }, ...(wide && { artifactPanel: { isOpen: true, artifact } }) };
-    }),
-  closeArtifactPanel: () => set({ artifactPanel: CLOSED_PANEL }),
+      artifactPanel: CLOSED_PANEL,
+      openArtifactPanel: (artifact) => set({ artifactPanel: { isOpen: true, artifact } }),
+      closeArtifactPanel: () => set({ artifactPanel: CLOSED_PANEL }),
     }),
     {
       name: DRAFTS_KEY,

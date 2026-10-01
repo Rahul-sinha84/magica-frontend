@@ -4,9 +4,11 @@ import Image from "next/image";
 import { ChevronDown } from "lucide-react";
 import { CreditsBadge } from "@/components/credits/CreditsBadge";
 import { FolderOpenIcon, LayoutSidebarIcon } from "@/components/icons";
+import { cn } from "@/lib/utils";
 import { useMobileSidebar } from "@/stores/uiStore";
 
-export function ChatHeader({ showFiles = false }: { showFiles?: boolean }) {
+// `busy`: a reply is being written, and (as on magica) the model can't be changed until it's done
+export function ChatHeader({ showFiles = false, busy = false }: { showFiles?: boolean; busy?: boolean }) {
   const setSidebarOpen = useMobileSidebar((s) => s.setOpen);
 
   return (
@@ -24,7 +26,10 @@ export function ChatHeader({ showFiles = false }: { showFiles?: boolean }) {
         type="button"
         title="Model selection isn't available in this build"
         aria-disabled="true"
-        className="flex h-7 min-w-0 items-center gap-2 rounded-lg px-2 text-sm text-text-primary outline-none hover:bg-surface-secondary focus-visible:ring-2 focus-visible:ring-ring"
+        className={cn(
+          "flex h-7 min-w-0 items-center gap-2 rounded-lg px-2 text-sm text-text-primary outline-none transition-opacity hover:bg-surface-secondary focus-visible:ring-2 focus-visible:ring-ring",
+          busy && "opacity-50 hover:bg-transparent",
+        )}
       >
         <Image src="/brand/magica-mark.svg" alt="" width={12} height={12} className="size-3 shrink-0 rounded-[3px] dark:invert" />
         <span className="truncate">Magica Auto</span>

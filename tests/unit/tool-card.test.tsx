@@ -34,20 +34,21 @@ describe("tool labels", () => {
 });
 
 describe("one-line steps", () => {
-  it("loading a skill shows the skill's name and can't be opened", () => {
+  it("loading a skill is one line, like magica's \"Skill\" row, and can't be opened", () => {
     const c = call("load_skill", { toolInput: { name: "image-generation" } });
     expect(toolOneLiner(c)).toBe("image-generation");
     render(<ToolCard call={c} result={ok(c, { skill: "image-generation", loaded: true })} />);
     expect(screen.getByText("Load skill")).toBeInTheDocument();
-    expect(screen.getByText("image-generation")).toBeInTheDocument();
+    // magica shows only the step's name, not which skill
+    expect(screen.queryByText("image-generation")).not.toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 
-  it("reading a skill file shows '<skill> / <path>' and can't be opened", () => {
+  it("reading a skill file is one line too, and can't be opened", () => {
     const c = call("read_skill_asset", { toolInput: { skill: "image-generation", path: "examples/presets.md" } });
     render(<ToolCard call={c} result={ok(c, { skill: "image-generation", path: "examples/presets.md", characters: 1840 })} />);
     expect(screen.getByText("Read skill file")).toBeInTheDocument();
-    expect(screen.getByText("image-generation / examples/presets.md")).toBeInTheDocument();
+    expect(screen.queryByText(/examples\/presets\.md/)).not.toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 
@@ -60,7 +61,16 @@ describe("one-line steps", () => {
 });
 
 describe("what a step made", () => {
-  const open = async (name: RegExp) => userEvent.setup().click(screen.getByRole("button", { name }));
+  // details start open, as on magica
+  const open = async (name: RegExp) => expect(screen.getByRole("button", { name })).toHaveAttribute("aria-expanded", "true");
+
+  it("a step's details start open and can be closed", async () => {
+    const c = call("gpt_image_2", { toolInput: { prompt: "a cat" } });
+    render(<ToolCard call={c} result={ok(c, { url: "https://cdn.example.com/cat.png" })} />);
+    expect(screen.getByText("a cat")).toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole("button", { name: /GPT Image 2/ }));
+    expect(screen.queryByText("a cat")).not.toBeInTheDocument();
+  });
 
   it("a picture shows as a preview", async () => {
     const c = call("gpt_image_2", { toolInput: { prompt: "a cat" }, creditCost: 70_000 });
@@ -140,8 +150,8 @@ describe("a reply with tool results and no text", () => {
     // an empty text block would render as an empty Markdown wrapper
     const empty = [...container.querySelectorAll("div.min-w-0")].filter((el) => !el.textContent?.trim() && !el.querySelector("img,video,audio"));
     expect(empty).toHaveLength(0);
-    // nothing to copy, so no Copy button
-    expect(screen.queryByRole("button", { name: "Copy" })).not.toBeInTheDocument();
+    // magica keeps Copy in the row even when there is no text
+    expect(screen.getByRole("button", { name: "Copy" })).toBeInTheDocument();
   });
 
   it("renders just the steps and the picture (the blank text is skipped)", () => {

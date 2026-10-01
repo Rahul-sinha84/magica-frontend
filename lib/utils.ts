@@ -35,9 +35,11 @@ export function toolLabel(name: string) {
     .join(" ");
 }
 
-// 1700 -> "1.7s", 34700 -> "34.7s", 72000 -> "1m 12s"
+// 244 -> "244ms", 1700 -> "1.7s", 34700 -> "34.7s", 72000 -> "1m 12s"
 export function formatDuration(ms: number) {
   if (!Number.isFinite(ms) || ms < 0) return "";
+  // under a second in milliseconds, as magica writes it ("244ms")
+  if (ms < 1000) return `${Math.round(ms)}ms`;
   if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
   const seconds = Math.round(ms / 1000);
   return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
@@ -90,12 +92,12 @@ export function safeAssetUrl(url: string): string | null {
   }
 }
 
-// "30-Sept-2026", as magica's preview writes dates
+// "30-Sept-2026" or "01-Oct-2026", as magica's preview writes dates
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "June", "July", "Aug", "Sept", "Oct", "Nov", "Dec"];
 export function formatPreviewDate(iso: string) {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
-  return `${date.getDate()}-${MONTHS[date.getMonth()]}-${date.getFullYear()}`;
+  return `${String(date.getDate()).padStart(2, "0")}-${MONTHS[date.getMonth()]}-${date.getFullYear()}`;
 }
 
 // The shape to reserve for a picture or video. A missing, zero or nonsense size falls back, and an extreme

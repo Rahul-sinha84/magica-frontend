@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
-import { Figtree, Geist_Mono } from "next/font/google";
+import { Figtree, Geist_Mono, JetBrains_Mono } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import { AppProviders } from "@/providers/AppProviders";
 import "./globals.css";
 
 const figtree = Figtree({ subsets: ["latin"], variable: "--font-figtree" });
 const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono", preload: false });
+// code blocks in replies, as on magica
+const jetbrainsMono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains-mono", preload: false });
 
 export const metadata: Metadata = {
   title: "Magica",
@@ -17,7 +19,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${figtree.variable} ${geistMono.variable} h-full`}
+      className={`${figtree.variable} ${geistMono.variable} ${jetbrainsMono.variable} h-full`}
     >
       {/* browser extensions (Grammarly and others) add attributes to <body> before React loads; only this
           element's attributes are exempt from the hydration check */}

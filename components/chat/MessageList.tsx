@@ -13,6 +13,9 @@ import { StreamingMessage } from "./StreamingMessage";
 export const NEAR_BOTTOM_PX = 80;
 // Scrolling this close to the top asks for the next older page.
 const NEAR_TOP_PX = 400;
+// space above the first message and below the last
+const PADDING_START = 40;
+const PADDING_END = 16;
 
 type Item = { key: string; kind: "message"; message: MessageData; pending: boolean } | { key: "streaming"; kind: "streaming"; stream: AgentStream };
 
@@ -46,6 +49,13 @@ export function MessageList({ messages, pending, stream, hasOlder, isLoadingOlde
   // the row at the top of the screen when older messages were requested, so it can stay put
   const anchor = useRef<{ key: string; offset: number } | null>(null);
   const [showJump, setShowJump] = useState(false);
+  // magica, after a send: the question just sent goes to the top of the view and the reply grows below it,
+  // without the view following. Room is added under the last turn so it fills at least a screen, which
+  // lets the question reach the top and keeps the view still when the reply lands.
+  const [pinned, setPinned] = useState<string | null>(null);
+  const scrolledTo = useRef<string | null>(null);
+  const sent = pending.at(-1)?.clientMessageId;
+  if (sent && sent !== pinned) setPinned(sent);
 
   const items = useMemo<Item[]>(
     () => [
@@ -59,6 +69,10 @@ export function MessageList({ messages, pending, stream, hasOlder, isLoadingOlde
     [messages, pending, stream],
   );
 
+  // the newest reply keeps its footer in view (magica); none while another reply is being written
+  const lastItem = items.at(-1);
+  const latestReplyKey = lastItem?.kind === "message" && lastItem.message.role === "ASSISTANT" ? lastItem.key : null;
+
   // the list reads the virtualizer fresh on every render, so the compiler skipping it is fine
   // eslint-disable-next-line react-hooks/incompatible-library
   const virtualizer = useVirtualizer({
@@ -66,11 +80,21 @@ export function MessageList({ messages, pending, stream, hasOlder, isLoadingOlde
     getScrollElement: () => scrollRef.current,
     estimateSize: () => 120,
     overscan: 6,
-    paddingStart: 40,
-    paddingEnd: 16,
+    paddingStart: PADDING_START,
+    paddingEnd: PADDING_END,
     getItemKey: (index) => items[index].key,
   });
   const totalSize = virtualizer.getTotalSize();
+  // The room under the last turn, worked out from the same measurements as the rows (so the content never
+  // gets shorter for a moment, which would make the browser move the view). The first message has nothing
+  // above it to scroll away, so it stays where it is.
+  const viewHeight = virtualizer.scrollRect?.height ?? 0;
+  const pinnedIndex = pinned ? items.findIndex((item) => item.key === pinned) : -1;
+  const pinnedRow = pinnedIndex >= 0 ? virtualizer.measurementsCache[pinnedIndex] : undefined;
+  const lastRow = virtualizer.measurementsCache[items.length - 1];
+  const pinTop = !pinnedRow || pinnedIndex === 0 ? 0 : pinnedRow.start;
+  const filler = pinnedRow && lastRow ? Math.max(0, Math.floor(viewHeight - (lastRow.end - pinTop) - PADDING_END)) : 0;
+  const contentHeight = totalSize + filler;
 
   function loadOlder() {
     const el = scrollRef.current;
@@ -100,19 +124,23 @@ export function MessageList({ messages, pending, stream, hasOlder, isLoadingOlde
     anchor.current = null;
   });
 
-  // At the bottom, stay there as things arrive or grow (a reply, a picture finishing loading).
+  // A message just sent goes to the top of the view, wherever you had scrolled to (once, when it's sent).
   useLayoutEffect(() => {
     const el = scrollRef.current;
-    if (el && stickToBottom.current && !anchor.current) el.scrollTop = el.scrollHeight;
-  }, [totalSize, items.length]);
+    if (!el || !pinned || pinnedIndex < 0 || scrolledTo.current === pinned) return;
+    scrolledTo.current = pinned;
+    el.scrollTop = pinTop;
+  }, [pinned, pinnedIndex, pinTop]);
 
-  // Sending always takes you to the bottom, wherever you had scrolled to.
+  // At the bottom, stay there as things arrive or grow (a reply, a picture finishing loading), except
+  // under a question just sent, where the reply grows without the view following it.
   useLayoutEffect(() => {
     const el = scrollRef.current;
-    if (!el || pending.length === 0) return;
-    stickToBottom.current = true;
-    el.scrollTop = el.scrollHeight;
-  }, [pending.length]);
+    if (!el || anchor.current) return;
+    if (stickToBottom.current && pinnedIndex < 0) el.scrollTop = el.scrollHeight;
+    // the reply grew past the bottom of the view without a scroll: offer the jump down
+    else setShowJump(el.scrollHeight - el.scrollTop - el.clientHeight > NEAR_BOTTOM_PX);
+  }, [contentHeight, items, pinnedIndex]);
 
   // A short conversation that doesn't fill the screen has nothing to scroll, so fetch until it does.
   useLayoutEffect(() => {
@@ -140,7 +168,7 @@ export function MessageList({ messages, pending, stream, hasOlder, isLoadingOlde
         tabIndex={0}
         className="size-full overflow-y-auto outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
       >
-        <div className="relative w-full" style={{ height: totalSize }}>
+        <div className="relative w-full" style={{ height: contentHeight }}>
           {virtualizer.getVirtualItems().map((row) => {
             const item = items[row.index];
             return (
@@ -152,7 +180,11 @@ export function MessageList({ messages, pending, stream, hasOlder, isLoadingOlde
                 style={{ transform: `translateY(${row.start}px)` }}
               >
                 <div className="mx-auto w-full max-w-[900px] px-2 pb-6 sm:px-4">
-                  {item.kind === "streaming" ? <StreamingMessage stream={item.stream} /> : <Message message={item.message} pending={item.pending} />}
+                  {item.kind === "streaming" ? (
+                    <StreamingMessage stream={item.stream} />
+                  ) : (
+                    <Message message={item.message} pending={item.pending} latest={item.key === latestReplyKey} />
+                  )}
                 </div>
               </div>
             );

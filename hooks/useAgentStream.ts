@@ -146,17 +146,6 @@ export function useAgentStream(chatId: string): AgentStream | null {
     return chosen.map((b, i) => (i === first ? { ...block, durationMs: thinkingMs } : b));
   }, [live, folded, saved, thinkingMs]);
 
-  // A picture or video that just appeared opens in the side panel, once each (closing it keeps it closed).
-  const showNewArtifact = useChatStore((s) => s.showNewArtifact);
-  const runId = run?.runId;
-  useEffect(() => {
-    if (!runId) return;
-    for (const block of blocks) {
-      if (block.type === "image" || block.type === "video") {
-        showNewArtifact(runId, { chatId, asset: block, createdAt: new Date().toISOString(), openedBy: "stream" });
-      }
-    }
-  }, [blocks, runId, chatId, showNewArtifact]);
 
   if (!run) return null;
   const queued = run.status === "PENDING" || (!!triggerStatus && TRIGGER_QUEUED.has(triggerStatus));

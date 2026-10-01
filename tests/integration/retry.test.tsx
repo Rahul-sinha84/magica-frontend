@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { delay, http, HttpResponse } from "msw";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChatWindow } from "@/components/chat/ChatWindow";
@@ -141,14 +141,13 @@ describe("retrying", () => {
     expect(screen.queryByText(/Couldn't retry/)).not.toBeInTheDocument();
   });
 
-  it("works from the keyboard, with a focus ring and a tooltip", async () => {
+  it("works from the keyboard, with a focus ring", async () => {
     const { user } = await openFailed();
     const retries = count("/retry", "POST");
     const button = retryButton();
     button.focus();
     expect(button).toHaveFocus();
     expect(button.className).toMatch(/focus-visible:ring-2/);
-    expect(await screen.findByRole("tooltip")).toHaveTextContent("Retry");
     await user.keyboard("{Enter}");
     await waitFor(() => expect(retries.n).toBe(1));
   });
@@ -214,7 +213,7 @@ describe("when the retry is turned down", () => {
     refuse(409, "RUN_NOT_RETRYABLE");
     await user.click(retryButton());
     await screen.findByText("This reply can't be retried any more.");
-    const failure = screen.getByText(FAILURE);
-    expect(within(failure.closest("div")!).getByText(FAILURE)).toHaveAttribute("role", "alert");
+    // magica's box: the reason, still there, with Retry beside it
+    expect(screen.getByRole("alert")).toHaveTextContent(FAILURE);
   });
 });

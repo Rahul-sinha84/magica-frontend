@@ -8,6 +8,7 @@
 @theme inline {
   --font-sans: var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-code: var(--font-jetbrains-mono), ui-monospace, monospace;
   --font-heading: var(--font-sans);
 
   --color-background: var(--background);
@@ -129,13 +130,19 @@
   }
 }
 
-/* "Thinking" text with a light sweeping across it */
+/* "Thinking" / "Working · N steps": grey text with a dark band sweeping across it (magica's colours) */
 .thinking-shimmer {
-  background: linear-gradient(90deg, var(--text-secondary) 35%, var(--text-primary) 50%, var(--text-secondary) 65%) 0 0 / 250% 100%;
+  --shimmer-base: #737373;
+  --shimmer-band: #181818;
+  background: linear-gradient(90deg, var(--shimmer-base) 35%, var(--shimmer-band) 50%, var(--shimmer-base) 65%) 0 0 / 250% 100%;
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
   animation: thinking-shimmer 1.8s linear infinite;
+}
+.dark .thinking-shimmer {
+  --shimmer-base: #737373;
+  --shimmer-band: #f1f1f1;
 }
 @keyframes thinking-shimmer {
   to {

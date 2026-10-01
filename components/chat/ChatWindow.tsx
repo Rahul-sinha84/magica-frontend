@@ -57,7 +57,7 @@ export function ChatWindow({ chatId }: { chatId: string }) {
 
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-      <ChatHeader showFiles />
+      <ChatHeader showFiles busy={running} />
       {/* the page's heading, for screen readers: the task's name */}
       <h1 className="sr-only">{chat ? chatTitle(chat) : "Task"}</h1>
       {isLoading && messages.length === 0 ? (

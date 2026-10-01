@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChatWindow } from "@/components/chat/ChatWindow";
@@ -74,14 +74,18 @@ describe("live streaming", () => {
     expect(await screen.findByText("kept")).toBeInTheDocument();
   });
 
-  it("gets how long it thought from the run's metadata (there is no 'thinking ended' chunk)", async () => {
-    await startRun();
+  it("shows magica's '⌄ Thinking' row while the model thinks, with its reasoning when opened, then drops it", async () => {
+    const { user } = await startRun();
     realtime.push({ type: "thinking-delta", delta: "Let me see" });
     realtime.setRun({ status: "EXECUTING", metadata: { status: "thinking" } });
-    await screen.findByRole("button", { name: "Thinking" });
+    const row = await screen.findByRole("status", { name: "The assistant is thinking" });
+    await user.click(within(row).getByRole("button", { name: "Thinking" }));
+    expect(screen.getByText("Let me see")).toBeInTheDocument();
     realtime.setRun({ status: "EXECUTING", metadata: { status: "working", thinkingDurationMs: 2300 } });
     realtime.push({ type: "text-delta", delta: "Here goes" });
-    expect(await screen.findByRole("button", { name: /Thought for 2.3s/ })).toBeInTheDocument();
+    expect(await screen.findByText("Here goes")).toBeInTheDocument();
+    expect(screen.queryByRole("status", { name: "The assistant is thinking" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Thought for/)).not.toBeInTheDocument();
   });
 
   it("checks the server rarely while the stream is working", async () => {
@@ -212,7 +216,7 @@ describe("how a run ends", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(Date.now() + RUN_MS * 0.8);
     await user.click(screen.getByRole("button", { name: "Stop response" }));
-    expect(await screen.findByText("Stopped")).toBeInTheDocument();
+    expect(await screen.findByText("Response was interrupted")).toBeInTheDocument();
     expect(screen.getByText(/^Sure! This answer/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Send message" })).toBeInTheDocument();
   });
@@ -279,23 +283,27 @@ describe("the worker's own status", () => {
 });
 
 describe("the real tools while a reply is written", () => {
-  it("says which tool is running, from the run's metadata, and clears it when the tool finishes", async () => {
-    await startRun();
+  it("shows the running step with a spinner on its own row (no separate 'Running …' line), then a check", async () => {
+    const { user } = await startRun();
     realtime.push({ type: "tool-start", toolCallId: "s1-AbC123xyz", toolName: "gpt_image_2", toolInput: { mode: "text", prompt: "a cat" } });
     realtime.setRun({ status: "EXECUTING", metadata: { status: "working", currentTool: { name: "gpt_image_2", input: { prompt: "a cat" }, status: "running" } } });
-    expect(await screen.findByText("Running GPT Image 2…")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Working · 1 step/ })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /Working · 1 step/ })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Running" })).toBeInTheDocument();
+    expect(screen.queryByText(/^Running /)).not.toBeInTheDocument();
 
     realtime.push({ type: "tool-end", toolCallId: "s1-AbC123xyz", status: "completed", durationMs: 30_000, creditCost: 70_000, result: { url: "https://cdn.example.com/cat.png", width: 1024, height: 1024 } });
     realtime.setRun({ status: "EXECUTING", metadata: { status: "working" } });
-    await waitFor(() => expect(screen.queryByText(/^Running /)).not.toBeInTheDocument());
-    expect(screen.getByRole("button", { name: /Completed 1 step/ })).toBeInTheDocument();
+    // done: the list folds away, as on magica; opened, the step shows its check
+    const header = await screen.findByRole("button", { name: /Completed 1 step/ });
+    expect(header).toHaveAttribute("aria-expanded", "false");
+    await user.click(header);
+    expect(screen.getByRole("img", { name: "Done" })).toBeInTheDocument();
   });
 
   it("names unknown tools readably", async () => {
     await startRun();
-    realtime.setRun({ status: "EXECUTING", metadata: { status: "working", currentTool: { name: "upscale_video", input: {}, status: "running" } } });
-    expect(await screen.findByText("Running Upscale video…")).toBeInTheDocument();
+    realtime.push({ type: "tool-start", toolCallId: "s1-up", toolName: "upscale_video", toolInput: { factor: 2 } });
+    expect(await screen.findByText("Upscale video")).toBeInTheDocument();
   });
 
   it("a turn stopped mid-tool keeps that tool, shown as Failed with 'Stopped.'", async () => {
@@ -308,7 +316,7 @@ describe("the real tools while a reply is written", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(Date.now() + RUN_MS * 0.45);
     await view.user.click(await screen.findByRole("button", { name: "Stop response" }));
-    expect(await screen.findByText("Stopped")).toBeInTheDocument();
+    expect(await screen.findByText("Response was interrupted")).toBeInTheDocument();
 
     const saved = getMockDb().messages["chat-greeting"].at(-1)!;
     const step = saved.contentBlocks.find((b) => b.type === "tool_call" && b.toolName === "gpt_image_2");
@@ -316,7 +324,6 @@ describe("the real tools while a reply is written", () => {
     expect(saved.contentBlocks).toContainEqual(expect.objectContaining({ type: "tool_result", isError: true, errorMessage: "Stopped." }));
 
     await view.user.click(screen.getByRole("button", { name: /Completed 2 steps/ }));
-    await view.user.click(screen.getByRole("button", { name: /GPT Image 2/ }));
     expect(screen.getByRole("alert")).toHaveTextContent("Stopped.");
   });
 });
@@ -349,7 +356,7 @@ describe("mock mode looks like the real tools", () => {
 });
 
 describe("a real tool turn, as the backend streams it", () => {
-  it("shows one Thinking row and one steps group across the model's rounds", async () => {
+  it("shows one steps group across the model's rounds, and no thinking row once there are steps", async () => {
     await startRun();
     realtime.push(
       { type: "thinking-delta", delta: "Need the skill." },
@@ -359,41 +366,9 @@ describe("a real tool turn, as the backend streams it", () => {
       { type: "tool-start", toolCallId: "s2-8q6qGsyuo", toolName: "gpt_image_2", toolInput: { mode: "text", prompt: "A red apple" } },
     );
     expect(await screen.findByRole("button", { name: /Working · 2 steps/ })).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: /^(Thinking|Thought for)/ })).toHaveLength(1);
+    expect(screen.queryByRole("status", { name: "The assistant is thinking" })).not.toBeInTheDocument();
   });
 
-  it("clears 'Running …' as soon as the tool's end arrives, even if the metadata hasn't caught up", async () => {
-    await startRun();
-    realtime.push({ type: "tool-start", toolCallId: "s1-merge", toolName: "merge_videos", toolInput: { video_urls: ["https://a/1.mp4", "https://a/2.mp4"] } });
-    realtime.setRun({ status: "EXECUTING", metadata: { status: "working", currentTool: { name: "merge_videos", input: {}, status: "running" } } });
-    expect(await screen.findByText("Running Merge Videos…")).toBeInTheDocument();
-    // the tool finishes on the stream; the metadata still says it's running
-    realtime.push({ type: "tool-end", toolCallId: "s1-merge", status: "completed", durationMs: 24_700, result: { url: "https://cdn.example.com/m.mp4", mimeType: "video/mp4" } });
-    await waitFor(() => expect(screen.queryByText("Running Merge Videos…")).not.toBeInTheDocument());
-  });
 
-  it("keeps 'Running …' while a second run of the same tool is still going", async () => {
-    await startRun();
-    realtime.push(
-      { type: "tool-start", toolCallId: "s1-a", toolName: "gpt_image_2", toolInput: { prompt: "one" } },
-      { type: "tool-end", toolCallId: "s1-a", status: "completed", result: { url: "https://cdn.example.com/1.png" } },
-      { type: "tool-start", toolCallId: "s1-b", toolName: "gpt_image_2", toolInput: { prompt: "two" } },
-    );
-    realtime.setRun({ status: "EXECUTING", metadata: { status: "working", currentTool: { name: "gpt_image_2", input: {}, status: "running" } } });
-    expect(await screen.findByText("Running GPT Image 2…")).toBeInTheDocument();
-  });
 });
 
-describe("the backend's explicit tool end in the metadata", () => {
-  for (const status of ["completed", "failed"] as const) {
-    it(`hides 'Running …' when currentTool reports ${status}`, async () => {
-      await startRun();
-      realtime.push({ type: "tool-start", toolCallId: "s1-crop", toolName: "crop_image", toolInput: { image_url: "https://a/b.png" } });
-      realtime.setRun({ status: "EXECUTING", metadata: { status: "working", currentTool: { name: "crop_image", input: {}, status: "running" } } });
-      expect(await screen.findByText("Running Crop Image…")).toBeInTheDocument();
-      // the end arrives in the metadata first, before the stream's tool-end
-      realtime.setRun({ status: "EXECUTING", metadata: { status: "working", currentTool: { name: "crop_image", input: {}, status } } });
-      await waitFor(() => expect(screen.queryByText("Running Crop Image…")).not.toBeInTheDocument());
-    });
-  }
-});

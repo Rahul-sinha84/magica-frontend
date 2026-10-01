@@ -124,7 +124,7 @@ describe("formatPreviewDate", () => {
   it("writes dates the way magica's preview does", async () => {
     const { formatPreviewDate } = await import("@/lib/utils");
     expect(formatPreviewDate(new Date(2026, 8, 30, 12).toISOString())).toBe("30-Sept-2026");
-    expect(formatPreviewDate(new Date(2026, 0, 5, 12).toISOString())).toBe("5-Jan-2026");
+    expect(formatPreviewDate(new Date(2026, 0, 5, 12).toISOString())).toBe("05-Jan-2026");
     expect(formatPreviewDate("nonsense")).toBe("");
   });
 });

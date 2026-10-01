@@ -1,14 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, Coins, Copy, GitFork, ThumbsDown, ThumbsUp } from "lucide-react";
+import { Check, CircleDollarSign, Copy, GitFork, ThumbsDown, ThumbsUp } from "lucide-react";
 import { toast } from "sonner";
-import { RefreshIcon } from "@/components/icons";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useRetryRun } from "@/hooks/useRetryRun";
 import { copyText, creditsUsed } from "@/lib/blocks";
 import { cn, formatMessageTime, formatCredits } from "@/lib/utils";
-import { useChatStore } from "@/stores/chatStore";
 import type { Message } from "@/types";
 
 const button =
@@ -38,44 +34,31 @@ export function CopyButton({ text }: { text: string }) {
   );
 }
 
-// Retry on the one reply the backend says can be retried (the latest turn, failed or stopped). It sits in
-// the always-visible action row, since it's the way to recover. It's gone while anything is running or being
-// sent in this task, and it can't be pressed twice while the request is on its way.
-function RetryButton({ chatId, runId }: { chatId: string; runId: string }) {
-  const busy = useChatStore((s) => !!s.runs[chatId] || (s.optimistic[chatId] ?? []).length > 0);
-  const { retry, isRetrying } = useRetryRun(chatId);
-  if (busy) return null;
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button type="button" aria-label="Retry" disabled={isRetrying} onClick={() => retry(runId)} className={cn(button, "disabled:cursor-default disabled:opacity-50")}>
-          <RefreshIcon className={cn("size-[18px]", isRetrying && "animate-spin motion-reduce:animate-none")} />
-        </button>
-      </TooltipTrigger>
-      <TooltipContent>Retry</TooltipContent>
-    </Tooltip>
-  );
-}
-
-// Under an assistant reply: what it cost, copy, and the time. Branching and feedback aren't in this build.
-export function MessageActions({ message }: { message: Message }) {
+// Under an assistant reply, as on magica: what it cost, then copy / fork / 👍 / 👎 and the time. On the latest
+// reply it is always shown; on earlier ones it appears when you hover the reply (always on touch screens).
+// Forking and feedback aren't in this build.
+export function MessageActions({ message, latest = false }: { message: Message; latest?: boolean }) {
   const credits = creditsUsed(message.contentBlocks);
   const text = copyText(message);
   const inert = { type: "button" as const, title: "Not available in this build", "aria-disabled": true };
 
   return (
-    <div className="mt-3">
+    <div
+      className={cn(
+        "mt-3 transition-opacity",
+        !latest && "focus-within:opacity-100 sm:opacity-0 sm:group-hover/message:opacity-100 [@media(hover:none)]:opacity-100",
+      )}
+    >
       {credits > 0 && (
         <p className="flex items-center gap-1 text-[10px] leading-3 text-text-secondary">
-          <Coins className="size-3" aria-hidden="true" />
+          <CircleDollarSign className="size-3" aria-hidden="true" />
           {formatCredits(credits)} credits
         </p>
       )}
       <div className={cn("flex items-center gap-0.5", credits > 0 && "mt-1")}>
         <div className="-ml-2.5 flex items-center gap-0.5">
-          {message.canRetry === true && message.agentRunId && <RetryButton chatId={message.chatId} runId={message.agentRunId} />}
-          {text && <CopyButton text={text} />}
-          <button aria-label="Branch from here" className={button} {...inert}>
+          <CopyButton text={text} />
+          <button aria-label="Fork chat" className={button} {...inert}>
             <GitFork className="size-[18px]" />
           </button>
           <button aria-label="Good response" className={button} {...inert}>

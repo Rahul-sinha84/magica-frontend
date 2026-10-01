@@ -140,7 +140,7 @@ describe("runs and Stop requests that outlive their moment", () => {
 });
 
 describe("the streaming reply", () => {
-  it("puts the thinking time on the first think only", async () => {
+  it("shows no thinking row once the reply has text (magica shows thinking only before anything else)", async () => {
     running();
     realtime.setRun({ status: "EXECUTING", metadata: { status: "working", thinkingDurationMs: 1500 } });
     realtime.push(
@@ -150,10 +150,11 @@ describe("the streaming reply", () => {
       { type: "text-delta", delta: "end" },
     );
     await openChat();
-    await new Promise((r) => setTimeout(r, 300));
-    console.log("DBG", screen.getByRole("log").textContent, JSON.stringify(useChatStore.getState().runs));
-    expect(await screen.findByRole("button", { name: "Thought for 1.5s" })).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: /Thought for/ })).toHaveLength(1);
+    expect(await screen.findByText("middle")).toBeInTheDocument();
+    expect(screen.getByText("end")).toBeInTheDocument();
+    expect(screen.queryByRole("status", { name: "The assistant is thinking" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Thought for/)).not.toBeInTheDocument();
+    expect(screen.queryByText("first")).not.toBeInTheDocument();
   });
 
   it("isn't announced to screen readers on every chunk", async () => {

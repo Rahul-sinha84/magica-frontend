@@ -33,6 +33,32 @@ describe("message content", () => {
     expect(screen.getByRole("link")).toHaveAttribute("href", "https://evil.example/pixel.png");
   });
 
+  it("shows a picture the reply made where its text puts it, once, between the paragraphs (magica)", () => {
+    const url = "https://cdn.example.com/cup.png";
+    view([
+      { type: "image", url, altText: "A blue cup", width: 1024, height: 1024 },
+      { type: "text", content: `Here's your image:\n\n![cup](${url})\n\nA simple blue cup.` },
+    ]);
+    const pictures = screen.getAllByRole("img", { name: "A blue cup" });
+    expect(pictures).toHaveLength(1);
+    const before = screen.getByText("Here's your image:");
+    const after = screen.getByText("A simple blue cup.");
+    expect(before.compareDocumentPosition(pictures[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(pictures[0].compareDocumentPosition(after) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // no picture inside a paragraph
+    expect(pictures[0].closest("p")).toBeNull();
+    expect(screen.getByRole("button", { name: "Open A blue cup" })).toBeInTheDocument();
+  });
+
+  it("still shows any other image address in the text as a link", () => {
+    view([
+      { type: "image", url: "https://cdn.example.com/cup.png", altText: "A blue cup" },
+      { type: "text", content: "![tracker](https://evil.example/pixel.png?d=secret)" },
+    ]);
+    expect(screen.getAllByRole("img")).toHaveLength(1);
+    expect(screen.getByRole("link", { name: "tracker" })).toHaveAttribute("href", "https://evil.example/pixel.png?d=secret");
+  });
+
   it("shows an image, and opens it in the panel on click", async () => {
     view([{ type: "image", url: "/mock/red-apple.svg", altText: "A red apple", width: 100, height: 50 }]);
     expect(screen.getByRole("img", { name: "A red apple" })).toHaveAttribute("src", "/mock/red-apple.svg");
@@ -66,11 +92,11 @@ describe("message content", () => {
     expect(screen.getByText("Sneaky")).toBeInTheDocument();
   });
 
-  it("reveals the thinking text when opened", async () => {
-    view([{ type: "thinking", content: "Let me work this out", durationMs: 2300 }]);
+  it("never shows thinking in a reply (magica shows it only live)", () => {
+    const { container } = view([{ type: "thinking", content: "Let me work this out", durationMs: 2300 }, { type: "text", content: "Answer." }]);
     expect(screen.queryByText("Let me work this out")).not.toBeInTheDocument();
-    await userEvent.setup().click(screen.getByRole("button", { name: /Thought for 2.3s/ }));
-    expect(screen.getByText("Let me work this out")).toBeInTheDocument();
+    expect(screen.queryByText(/Thought for|Thinking/)).not.toBeInTheDocument();
+    expect(container).toHaveTextContent("Answer.");
   });
 
   it("hides usage blocks, which only feed the credits line", () => {
@@ -114,7 +140,6 @@ describe("steps", () => {
     // the result is not a step of its own
     expect(screen.getByRole("button", { name: /Completed 1 step$/ })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Completed 1 step$/ }));
-    await user.click(screen.getByRole("button", { name: /AI generation/ }));
     expect(screen.getByText("a red apple")).toBeInTheDocument();
     expect(screen.getByText("Credits used")).toBeInTheDocument();
   });
@@ -150,7 +175,7 @@ describe("message", () => {
     const { rerender } = render(<Message message={message({ status: "FAILED", content: "partial" })} pending={false} />);
     expect(within(document.body).getByRole("alert")).toBeInTheDocument();
     rerender(<Message message={message({ status: "CANCELLED", content: "partial" })} pending={false} />);
-    expect(screen.getByText(/stopped/i)).toBeInTheDocument();
+    expect(screen.getByText("Response was interrupted")).toBeInTheDocument();
   });
 
   it("shows the reason a reply failed", () => {
