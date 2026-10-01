@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { cancelRun } from "@/lib/cancelRun";
 import { ApiError } from "@/lib/queryClient";
 import { LIVE_POLL_MS, RUN_POLL_MS, TOKEN_REFRESH_LEAD_MS } from "@/lib/timing";
-import { useChatStore } from "@/stores/chatStore";
+import { useChatStore, type RunInFlight } from "@/stores/chatStore";
 import { chatQueryKey } from "./useChat";
 import { chatsQueryKey } from "./useChats";
 import { creditsQueryKey } from "./useCredits";
@@ -19,6 +19,11 @@ export const activeRunQueryKey = (chatId: string) => ["active-run", chatId] as c
 // check, and swapping it each time would restart the live stream every few seconds.
 function needsToken(expiresAt: string | null, now: number) {
   return !expiresAt || Date.parse(expiresAt) - now < TOKEN_REFRESH_LEAD_MS;
+}
+
+// Our two in-flight statuses; anything else (a run that just ended) leaves the current one alone.
+function serverStatus(status: string): RunInFlight["status"] | null {
+  return status === "PENDING" || status === "RUNNING" ? status : null;
 }
 
 // Keeps the screen in step with the run the server has in flight for this chat. The server owns that
@@ -59,6 +64,8 @@ export function useRunWatcher(chatId: string, { live = false }: { live?: boolean
         realtimeToken: data.realtimeToken,
         realtimeTokenExpiresAt: data.realtimeTokenExpiresAt,
         startedAt: dataUpdatedAt,
+        status: serverStatus(data.run.status) ?? "RUNNING",
+        statusAt: dataUpdatedAt,
       });
       // Stop was pressed while we didn't yet know the run (a send that timed out, then turned up here)
       const store = useChatStore.getState();
@@ -74,6 +81,9 @@ export function useRunWatcher(chatId: string, { live = false }: { live?: boolean
       }
       // a run restored before Trigger.dev picked it up had no Trigger.dev id yet; with one, it can stream live
       if (!run.triggerRunId && data.run.triggerRunId) patchRun(chatId, { triggerRunId: data.run.triggerRunId });
+      // waiting or started, as of this answer; an answer older than the last change doesn't count
+      const status = serverStatus(data.run.status);
+      if (status && status !== run.status && dataUpdatedAt > run.statusAt) patchRun(chatId, { status, statusAt: dataUpdatedAt });
     }
   }, [data, gone, dataUpdatedAt, run, chatId, setRun, patchRun, api]);
 

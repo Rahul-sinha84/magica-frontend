@@ -73,6 +73,9 @@ export function useSendMessage(chatId: string | null) {
           realtimeToken: response.realtimeToken,
           realtimeTokenExpiresAt: response.realtimeTokenExpiresAt,
           startedAt: Date.now(),
+          // a new turn waits in the queue until Trigger.dev starts it; the run watcher hears when it does
+          status: "PENDING",
+          statusAt: Date.now(),
         });
         // Stop was pressed while this was on its way
         if (useChatStore.getState().stopRequested[targetId]) {

@@ -6,3 +6,5 @@ export const LIVE_POLL_MS = 10_000;
 export const TOKEN_REFRESH_LEAD_MS = 30_000;
 // After the live stream fails, wait this long before trying it again (polling covers the gap).
 export const REALTIME_RETRY_MS = 30_000;
+// A turn still waiting in the queue after this long gets a note saying so (most start well before).
+export const QUEUED_NOTICE_MS = 10_000;

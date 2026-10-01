@@ -27,14 +27,19 @@ function validChunk(part: unknown): AgentStreamChunk | null {
   return chunk;
 }
 
-export type StreamPhase = "thinking" | "writing" | "stopping";
+// Trigger.dev statuses for a run that is waiting to be picked up
+const TRIGGER_QUEUED = new Set(["QUEUED", "DELAYED", "PENDING_VERSION"]);
+
+// "waiting": queued, nothing written yet. Looks like "thinking" at first, with a note if it lasts.
+export type StreamPhase = "waiting" | "thinking" | "writing" | "stopping";
 
 export interface AgentStream {
   chatId: string;
   // the reply so far; empty until something has arrived
   blocks: ContentBlock[];
   phase: StreamPhase;
-  // true while the live stream is delivering; otherwise the screen follows the server's saved progress
+  // true while the live stream is healthy (connected, or delivering); otherwise the screen follows the
+  // server's saved progress, checked every couple of seconds
   live: boolean;
   // the server couldn't be reached on the last check; it keeps trying
   reconnecting: boolean;
@@ -83,7 +88,10 @@ export function useAgentStream(chatId: string): AgentStream | null {
     [enabled, stream.parts],
   );
   const failed = enabled && !!(stream.error || realtime.error);
-  const live = enabled && !failed && chunks.length > 0;
+  // Healthy once Trigger.dev has answered for the run without an error, even before the first chunk: a
+  // turn can sit in the queue for minutes, and checking the server every 2s all that time (for everyone
+  // waiting) would flood it. The slow check still catches the end.
+  const live = enabled && !failed && (chunks.length > 0 || !!realtime.run);
 
   const { partial, check, reconnecting } = useRunWatcher(chatId, { live });
 
@@ -142,7 +150,14 @@ export function useAgentStream(chatId: string): AgentStream | null {
   }, [blocks, runId, chatId, showNewArtifact]);
 
   if (!run) return null;
+  const queued = run.status === "PENDING" || (!!triggerStatus && TRIGGER_QUEUED.has(triggerStatus));
   const phase: StreamPhase =
-    stopping || metadata?.status === "stopping" ? "stopping" : blocks.length === 0 || metadata?.status === "thinking" ? "thinking" : "writing";
+    stopping || metadata?.status === "stopping"
+      ? "stopping"
+      : queued && blocks.length === 0
+        ? "waiting"
+        : blocks.length === 0 || metadata?.status === "thinking"
+          ? "thinking"
+          : "writing";
   return { chatId, blocks, phase, live, reconnecting };
 }

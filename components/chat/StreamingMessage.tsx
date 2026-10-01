@@ -1,7 +1,8 @@
 "use client";
 
-import { memo } from "react";
+import { memo, useEffect, useState } from "react";
 import type { AgentStream } from "@/hooks/useAgentStream";
+import { QUEUED_NOTICE_MS } from "@/lib/timing";
 import { MessageContent } from "./MessageContent";
 import { TypingIndicator } from "./TypingIndicator";
 
@@ -10,6 +11,15 @@ import { TypingIndicator } from "./TypingIndicator";
 export const StreamingMessage = memo(function StreamingMessage({ stream }: { stream: AgentStream }) {
   const { blocks, phase } = stream;
   const hasThinking = blocks.some((block) => block.type === "thinking");
+  // A queued turn looks like "thinking" at first, since most start within seconds. If it is still waiting
+  // after a while, a note says why.
+  const waiting = phase === "waiting";
+  const [waitedLong, setWaitedLong] = useState(false);
+  useEffect(() => {
+    if (!waiting) return;
+    const timer = setTimeout(() => setWaitedLong(true), QUEUED_NOTICE_MS);
+    return () => clearTimeout(timer);
+  }, [waiting]);
   return (
     // The conversation announces new messages. This row changes many times a second, so it stays quiet;
     // the saved reply is announced once when it lands.
@@ -19,6 +29,11 @@ export const StreamingMessage = memo(function StreamingMessage({ stream }: { str
         <div className={blocks.length > 0 && phase === "thinking" && !hasThinking ? "mt-4" : undefined}>
           <MessageContent blocks={blocks} thinkingActive={phase === "thinking"} chatId={stream.chatId} />
         </div>
+      )}
+      {waiting && waitedLong && (
+        <p role="status" className="mt-3 text-sm text-text-secondary">
+          Lots of people are using the assistant right now. Your message is queued and will start shortly.
+        </p>
       )}
       {phase === "stopping" && <p className="mt-3 text-sm text-text-secondary">Stopping…</p>}
       {stream.reconnecting && (

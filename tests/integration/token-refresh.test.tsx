@@ -21,7 +21,7 @@ function knownRun(token: string, inMs: number) {
     triggerRunId: "t-k",
     realtimeToken: token,
     realtimeTokenExpiresAt: new Date(Date.now() + inMs).toISOString(),
-    startedAt: Date.now() - 1000,
+    startedAt: Date.now() - 1000, status: "RUNNING", statusAt: 0,
   });
 }
 

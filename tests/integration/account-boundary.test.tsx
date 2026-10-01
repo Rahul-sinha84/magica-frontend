@@ -11,7 +11,7 @@ describe("switching accounts in the same tab", () => {
     const { client, rerender } = renderApp(<AccountBoundary />);
     client.setQueryData(["chats"], { pages: [{ chats: [{ id: "a-secret-task" }] }] });
     store().setDraft("chat-a", "private thought");
-    store().setRun("chat-a", { runId: "r", triggerRunId: null, realtimeToken: "t", realtimeTokenExpiresAt: null, startedAt: 1 });
+    store().setRun("chat-a", { runId: "r", triggerRunId: null, realtimeToken: "t", realtimeTokenExpiresAt: null, startedAt: 1 , status: "RUNNING", statusAt: 0});
 
     clerkState.userId = "user_b";
     rerender(<AccountBoundary />);

@@ -32,7 +32,7 @@ describe("restoring a run", () => {
 
   it("does not replace a run this tab already follows", async () => {
     running("chat-greeting", "run-1");
-    useChatStore.getState().setRun("chat-greeting", { runId: "run-1", triggerRunId: "t-run-1", realtimeToken: "mine", realtimeTokenExpiresAt: new Date(Date.now() + 3_600_000).toISOString(), startedAt: 123 });
+    useChatStore.getState().setRun("chat-greeting", { runId: "run-1", triggerRunId: "t-run-1", realtimeToken: "mine", realtimeTokenExpiresAt: new Date(Date.now() + 3_600_000).toISOString(), startedAt: 123 , status: "RUNNING", statusAt: 0});
     renderApp(<ChatWindow chatId="chat-greeting" />);
     await screen.findByRole("button", { name: "Stop response" });
     await new Promise((r) => setTimeout(r, 100));
@@ -41,7 +41,7 @@ describe("restoring a run", () => {
 
   it("leaves another task's run alone when switching tasks", async () => {
     running("chat-apple", "run-a");
-    useChatStore.getState().setRun("chat-apple", { runId: "run-a", triggerRunId: "t-run-a", realtimeToken: "a", realtimeTokenExpiresAt: null, startedAt: Date.now() });
+    useChatStore.getState().setRun("chat-apple", { runId: "run-a", triggerRunId: "t-run-a", realtimeToken: "a", realtimeTokenExpiresAt: null, startedAt: Date.now() , status: "RUNNING", statusAt: 0});
     const { rerender } = renderApp(<ChatWindow key="chat-apple" chatId="chat-apple" />);
     await screen.findByRole("button", { name: "Stop response" });
     rerender(<ChatWindow key="chat-greeting" chatId="chat-greeting" />);
@@ -53,7 +53,7 @@ describe("restoring a run", () => {
   });
 
   it("drops a run that finished while this tab was elsewhere", async () => {
-    useChatStore.getState().setRun("chat-greeting", { runId: "run-old", triggerRunId: "t-old", realtimeToken: null, realtimeTokenExpiresAt: null, startedAt: Date.now() - 60_000 });
+    useChatStore.getState().setRun("chat-greeting", { runId: "run-old", triggerRunId: "t-old", realtimeToken: null, realtimeTokenExpiresAt: null, startedAt: Date.now() - 60_000 , status: "RUNNING", statusAt: 0});
     renderApp(<ChatWindow chatId="chat-greeting" />);
     await waitFor(() => expect(useChatStore.getState().runs["chat-greeting"]).toBeUndefined());
     expect(screen.queryByRole("button", { name: "Stop response" })).not.toBeInTheDocument();

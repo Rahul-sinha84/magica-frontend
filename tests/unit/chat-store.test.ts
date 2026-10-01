@@ -20,8 +20,8 @@ describe("chat store", () => {
   });
 
   it("tracks runs per chat", () => {
-    get().setRun("a", { runId: "r1", triggerRunId: null, realtimeToken: null, realtimeTokenExpiresAt: null, startedAt: 1 });
-    get().setRun("b", { runId: "r2", triggerRunId: null, realtimeToken: null, realtimeTokenExpiresAt: null, startedAt: 1 });
+    get().setRun("a", { runId: "r1", triggerRunId: null, realtimeToken: null, realtimeTokenExpiresAt: null, startedAt: 1 , status: "RUNNING", statusAt: 0});
+    get().setRun("b", { runId: "r2", triggerRunId: null, realtimeToken: null, realtimeTokenExpiresAt: null, startedAt: 1 , status: "RUNNING", statusAt: 0});
     get().clearRun("a");
     expect(Object.keys(get().runs)).toEqual(["b"]);
   });
@@ -44,7 +44,7 @@ describe("chat store", () => {
 describe("drafts across a reload", () => {
   it("keeps only the drafts, in this tab's session storage", () => {
     get().setDraft("c1", "half a thought");
-    get().setRun("c1", { runId: "r", triggerRunId: null, realtimeToken: "secret", realtimeTokenExpiresAt: null, startedAt: 1 });
+    get().setRun("c1", { runId: "r", triggerRunId: null, realtimeToken: "secret", realtimeTokenExpiresAt: null, startedAt: 1 , status: "RUNNING", statusAt: 0});
     const saved = JSON.parse(sessionStorage.getItem("magica-drafts") ?? "{}");
     expect(saved.state).toEqual({ drafts: { c1: "half a thought" } });
   });

@@ -119,7 +119,8 @@ describe("the Stop button always sends the cancel request", () => {
     server.use(
       http.post(cancelUrl, async () => {
         calls++;
-        await delay(100);
+        // long enough that "Stopping" can be seen before the failure brings Stop back, even on a busy machine
+        await delay(600);
         return calls === 1 ? HttpResponse.json({ error: "down", code: "INTERNAL_ERROR" }, { status: 500 }) : new HttpResponse(null, { status: 204 });
       }),
     );

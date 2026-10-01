@@ -130,7 +130,7 @@ describe("runs and Stop requests that outlive their moment", () => {
 
   it("deleting a task lets go of its run", async () => {
     running();
-    useChatStore.getState().setRun("chat-greeting", { runId: "run-1", triggerRunId: "t-run-1", realtimeToken: null, realtimeTokenExpiresAt: null, startedAt: Date.now() });
+    useChatStore.getState().setRun("chat-greeting", { runId: "run-1", triggerRunId: "t-run-1", realtimeToken: null, realtimeTokenExpiresAt: null, startedAt: Date.now() , status: "RUNNING", statusAt: 0});
     const { client } = renderApp(<div />);
     const { QueryClientProvider } = await import("@tanstack/react-query");
     const { result } = renderHook(() => useDeleteChat(), { wrapper: ({ children }) => <QueryClientProvider client={client}>{children}</QueryClientProvider> });
@@ -150,6 +150,8 @@ describe("the streaming reply", () => {
       { type: "text-delta", delta: "end" },
     );
     await openChat();
+    await new Promise((r) => setTimeout(r, 300));
+    console.log("DBG", screen.getByRole("log").textContent, JSON.stringify(useChatStore.getState().runs));
     expect(await screen.findByRole("button", { name: "Thought for 1.5s" })).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: /Thought for/ })).toHaveLength(1);
   });

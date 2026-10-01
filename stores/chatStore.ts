@@ -22,6 +22,10 @@ export interface RunInFlight {
   realtimeTokenExpiresAt: string | null;
   // when we learned of it, so an older active-run answer can't be mistaken for "it finished"
   startedAt: number;
+  // the server's view: waiting in Trigger.dev's queue, or started
+  status: "PENDING" | "RUNNING";
+  // when `status` was last set, so an older active-run answer can't move it back
+  statusAt: number;
 }
 
 // The generated picture or video shown in the side panel, and the task it belongs to (the panel only
