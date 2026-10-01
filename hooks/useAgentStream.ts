@@ -168,7 +168,11 @@ export function useAgentStream(chatId: string): AgentStream | null {
         : blocks.length === 0 || metadata?.status === "thinking"
           ? "thinking"
           : "writing";
+  // The metadata can lag the stream by a few seconds, so the line also goes as soon as the stream shows
+  // that tool finished (and no other run of it is still going).
   const tool = metadata?.currentTool;
-  const runningTool = tool && tool.status === "running" ? toolTitle(tool.name) : null;
+  const ofTool = tool ? blocks.filter((block) => block.type === "tool_call" && block.toolName === tool.name) : [];
+  const finished = ofTool.length > 0 && ofTool.every((block) => block.type === "tool_call" && (block.status === "completed" || block.status === "failed"));
+  const runningTool = tool && tool.status === "running" && !finished ? toolTitle(tool.name) : null;
   return { chatId, blocks, phase, live, reconnecting, runningTool };
 }

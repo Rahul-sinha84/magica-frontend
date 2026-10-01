@@ -2,6 +2,8 @@ import { blocksToText, TOOL_LABELS } from "@/contracts";
 import { formatCredits, safeAssetUrl, toolLabel } from "@/lib/utils";
 import type { ContentBlock, Message, ToolCallBlock, ToolResultBlock } from "@/types";
 
+type ThinkingBlock = Extract<ContentBlock, { type: "thinking" }>;
+
 export type Segment =
   | { kind: "block"; block: Exclude<ContentBlock, ToolCallBlock | ToolResultBlock> }
   | { kind: "steps"; calls: ToolCallBlock[]; results: Map<string, ToolResultBlock> };
@@ -12,16 +14,29 @@ export function groupBlocks(blocks: readonly ContentBlock[]): Segment[] {
   const results = new Map<string, ToolResultBlock>();
   for (const block of blocks) if (block.type === "tool_result") results.set(block.toolCallId, block);
 
+  // Like magica, a reply has one "Thinking" row and one "Working · N steps" group, even though the model
+  // thinks and calls tools in several rounds (think, load a skill, think, generate, think, answer). Every
+  // step joins the group where the first step was, and every think joins the first thinking row.
   const segments: Segment[] = [];
+  let steps: Extract<Segment, { kind: "steps" }> | null = null;
+  let thinking: { kind: "block"; block: ThinkingBlock } | null = null;
   for (const block of blocks) {
     if (block.type === "tool_result") continue;
-    if (block.type !== "tool_call") {
-      segments.push({ kind: "block", block });
+    if (block.type === "tool_call") {
+      if (steps) steps.calls.push(block);
+      else segments.push((steps = { kind: "steps", calls: [block], results }));
       continue;
     }
-    const last = segments.at(-1);
-    if (last?.kind === "steps") last.calls.push(block);
-    else segments.push({ kind: "steps", calls: [block], results });
+    if (block.type === "thinking") {
+      if (!thinking) {
+        segments.push((thinking = { kind: "block", block: { ...block } }));
+      } else {
+        const content = [thinking.block.content, block.content].filter((part) => part.trim()).join("\n\n");
+        thinking.block = { ...thinking.block, content, durationMs: thinking.block.durationMs ?? block.durationMs };
+      }
+      continue;
+    }
+    segments.push({ kind: "block", block });
   }
   return segments;
 }

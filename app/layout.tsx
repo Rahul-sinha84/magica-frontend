@@ -19,7 +19,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       suppressHydrationWarning
       className={`${figtree.variable} ${geistMono.variable} h-full`}
     >
-      <body className="min-h-full">
+      {/* browser extensions (Grammarly and others) add attributes to <body> before React loads; only this
+          element's attributes are exempt from the hydration check */}
+      <body className="min-h-full" suppressHydrationWarning>
         <ClerkProvider
           signInUrl="/sign-in"
           signUpUrl="/sign-up"

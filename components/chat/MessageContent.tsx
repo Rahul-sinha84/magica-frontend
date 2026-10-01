@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronRight, ImageOff, Maximize2 } from "lucide-react";
+import { ChevronRight, Download, ImageOff, ImagePlus, Maximize2 } from "lucide-react";
 import { groupBlocks, type Segment } from "@/lib/blocks";
 import { assetRatio, cn, formatClipLength, formatDuration, safeAssetUrl } from "@/lib/utils";
 import { useChatStore } from "@/stores/chatStore";
@@ -43,25 +43,38 @@ function Picture({ block, origin }: { block: ImageBlock; origin: Origin }) {
   const [broken, setBroken] = useState(false);
   const ratio = assetRatio(block.width, block.height, 1);
   const label = block.altText ?? "Generated image";
+  const overlayButton =
+    "flex size-7 items-center justify-center rounded-[4px] bg-[rgba(10,10,11,0.5)] text-white outline-none hover:bg-[rgba(10,10,11,0.7)] focus-visible:ring-2 focus-visible:ring-white";
 
   return (
-    <div className="max-h-[512px] w-full max-w-[384px] overflow-hidden rounded-xl bg-surface-primary" style={{ aspectRatio: ratio }}>
+    <div className="group/picture relative max-h-[512px] w-full max-w-[384px] overflow-hidden rounded-xl bg-surface-primary" style={{ aspectRatio: ratio }}>
       {broken || !src ? (
         <div className="flex size-full flex-col items-center justify-center gap-2 text-sm text-text-secondary">
           <ImageOff className="size-6" aria-hidden="true" />
           Image unavailable
         </div>
       ) : (
-        <button
-          type="button"
-          aria-label={`Open ${label}`}
-          disabled={!origin.chatId}
-          onClick={() => origin.chatId && open({ chatId: origin.chatId, asset: block, createdAt: origin.createdAt ?? null, openedBy: "user" })}
-          className="block size-full cursor-zoom-in outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default"
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element -- generated pictures come from anywhere */}
-          <img src={src} alt={label} loading="lazy" onError={() => setBroken(true)} className="size-full object-contain" />
-        </button>
+        <>
+          <button
+            type="button"
+            aria-label={`Open ${label}`}
+            disabled={!origin.chatId}
+            onClick={() => origin.chatId && open({ chatId: origin.chatId, asset: block, createdAt: origin.createdAt ?? null, openedBy: "user" })}
+            className="block size-full cursor-zoom-in outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element -- generated pictures come from anywhere */}
+            <img src={src} alt={label} loading="lazy" onError={() => setBroken(true)} className="size-full rounded-xl object-contain" />
+          </button>
+          {/* magica's two corner actions, shown on hover or keyboard focus (always on touch screens) */}
+          <div className="absolute right-2 top-2 flex gap-1 opacity-0 transition-opacity duration-150 focus-within:opacity-100 group-hover/picture:opacity-100 [@media(hover:none)]:opacity-100">
+            <button type="button" aria-label="Use as reference" title="Not available in this build" aria-disabled="true" className={overlayButton}>
+              <ImagePlus className="size-4" aria-hidden="true" />
+            </button>
+            <a href={src} download target="_blank" rel="noopener noreferrer" aria-label={`Download ${label}`} className={overlayButton}>
+              <Download className="size-4" aria-hidden="true" />
+            </a>
+          </div>
+        </>
       )}
     </div>
   );
@@ -163,6 +176,12 @@ function BlockView({ block, thinkingActive, origin }: { block: Block; thinkingAc
 }
 
 // Everything in an assistant reply, top to bottom: text, steps, pictures, sources.
+const isMedia = (segment: Segment) => segment.kind === "block" && (segment.block.type === "image" || segment.block.type === "video" || segment.block.type === "audio");
+
+// Everything in an assistant reply, laid out as magica does: the "Thinking" row, the steps, the text (and
+// anything else written), then the pictures, videos and audio the reply made, in one media area at the end.
+// A tool's picture arrives before the model writes about it, so it is moved below the text rather than
+// shown in the order it was streamed.
 export function MessageContent({
   blocks,
   thinkingActive = false,
@@ -177,24 +196,46 @@ export function MessageContent({
       segment.kind === "steps" ||
       (segment.block.type !== "usage" && !((segment.block.type === "text" || segment.block.type === "reasoning") && !segment.block.content.trim())),
   );
+  const flow = segments.filter((segment) => !isMedia(segment));
+  const media = segments.flatMap((segment) =>
+    segment.kind === "block" && (segment.block.type === "image" || segment.block.type === "video" || segment.block.type === "audio") ? [segment.block] : [],
+  );
+  const visual = media.filter((block): block is ImageBlock | VideoBlock => block.type !== "audio");
+  const sounds = media.filter((block): block is AudioBlock => block.type === "audio");
+
+  // as on magica: a "Completed N steps" or "Thought for" row sits 4px above what follows it, and
+  // everything else is 16px apart
+  const gapAfter = (previous: Segment | undefined) =>
+    !previous ? undefined : previous.kind === "steps" || previous.block.type === "thinking" ? "mt-1" : "mt-4";
+  const last = flow.at(-1);
+
   return (
     <div>
-      {segments.map((segment, i) => {
-        // as on magica: a "Completed N steps" or "Thought for" row sits 4px above what follows it, and
-        // everything else is 16px apart
-        const previous = segments[i - 1];
-        const header = previous && (previous.kind === "steps" || previous.block.type === "thinking");
-        const gap = i === 0 ? undefined : header ? "mt-1" : "mt-4";
-        return segment.kind === "steps" ? (
-          <div key={`steps-${segment.calls[0].toolCallId}`} className={gap}>
+      {flow.map((segment, i) =>
+        segment.kind === "steps" ? (
+          <div key={`steps-${segment.calls[0].toolCallId}`} className={gapAfter(flow[i - 1])}>
             <StepGroup calls={segment.calls} results={segment.results} />
           </div>
         ) : (
-          <div key={i} className={gap}>
+          <div key={i} className={gapAfter(flow[i - 1])}>
             <BlockView block={segment.block} thinkingActive={thinkingActive} origin={origin} />
           </div>
-        );
-      })}
+        ),
+      )}
+      {visual.length > 0 && (
+        <div className={cn("flex flex-wrap gap-2", gapAfter(last))}>
+          {visual.map((block) => (
+            <div key={block.url} className="w-full max-w-[384px]">
+              <BlockView block={block} thinkingActive={thinkingActive} origin={origin} />
+            </div>
+          ))}
+        </div>
+      )}
+      {sounds.map((block, i) => (
+        <div key={block.url} className={i === 0 && visual.length === 0 ? gapAfter(last) : "mt-4"}>
+          <BlockView block={block} thinkingActive={thinkingActive} origin={origin} />
+        </div>
+      ))}
     </div>
   );
 }
