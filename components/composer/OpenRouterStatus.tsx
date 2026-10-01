@@ -39,9 +39,12 @@ export function OpenRouterStatus() {
         </span>
       </TooltipTrigger>
       <TooltipContent side="top" className="max-w-64">
-        <p className="font-medium">Free model</p>
-        {lastModel && <p>Last answered by {lastModel}</p>}
-        {look.note && <p>{look.note}</p>}
+        {/* stacked: the tooltip lays its children out in a row */}
+        <div className="flex flex-col gap-0.5 text-left">
+          <p className="font-medium">Free model</p>
+          {lastModel && <p className="break-all">Last answered by {lastModel}</p>}
+          {look.note && <p>{look.note}</p>}
+        </div>
       </TooltipContent>
     </Tooltip>
   );
