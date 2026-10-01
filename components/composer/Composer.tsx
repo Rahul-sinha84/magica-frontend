@@ -5,6 +5,7 @@ import { PlugIcon } from "@/components/icons";
 import { MAX_MESSAGE_LENGTH } from "@/lib/limits";
 import { cn } from "@/lib/utils";
 import { ComposerTextarea } from "./ComposerTextarea";
+import { OpenRouterStatus } from "./OpenRouterStatus";
 import { SendButton } from "./SendButton";
 
 interface Props {
@@ -58,6 +59,7 @@ export function Composer({ value, onChange, placeholder, onSubmit, onStop, runni
         <button type="button" aria-label="Connect apps" title={INERT} aria-disabled="true" className={cn(action, "size-8")}>
           <PlugIcon className="size-5 -rotate-45" />
         </button>
+        <OpenRouterStatus />
         <div className="ml-auto flex items-center gap-0.5">
           <button type="button" aria-label="Dictation" title={INERT} aria-disabled="true" className={cn(action, "size-[34px]")}>
             <Mic className="size-4" />

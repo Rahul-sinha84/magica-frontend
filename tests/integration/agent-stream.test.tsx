@@ -54,12 +54,12 @@ describe("live streaming", () => {
     await startRun();
     expect(screen.getByRole("status", { name: "The assistant is thinking" })).toBeInTheDocument();
 
-    realtime.setRun({ status: "EXECUTING", metadata: { status: "calling-tool" } });
+    realtime.setRun({ status: "EXECUTING", metadata: { status: "working", currentTool: { name: "skill", input: { name: "research" }, status: "running" } } });
     realtime.push({ type: "tool-start", toolCallId: "t1", toolName: "skill", toolInput: { name: "research" } });
     expect(await screen.findByRole("button", { name: /Working · 1 step/ })).toBeInTheDocument();
 
     realtime.push({ type: "tool-end", toolCallId: "t1", status: "completed", durationMs: 800 }, { type: "text-delta", delta: "The answer " });
-    realtime.setRun({ status: "EXECUTING", metadata: { status: "streaming" } });
+    realtime.setRun({ status: "EXECUTING", metadata: { status: "working" } });
     expect(await screen.findByText("The answer")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Completed 1 step/ })).toBeInTheDocument();
 
@@ -79,7 +79,7 @@ describe("live streaming", () => {
     realtime.push({ type: "thinking-delta", delta: "Let me see" });
     realtime.setRun({ status: "EXECUTING", metadata: { status: "thinking" } });
     await screen.findByRole("button", { name: "Thinking" });
-    realtime.setRun({ status: "EXECUTING", metadata: { status: "streaming", thinkingDurationMs: 2300 } });
+    realtime.setRun({ status: "EXECUTING", metadata: { status: "working", thinkingDurationMs: 2300 } });
     realtime.push({ type: "text-delta", delta: "Here goes" });
     expect(await screen.findByRole("button", { name: /Thought for 2.3s/ })).toBeInTheDocument();
   });
@@ -222,5 +222,58 @@ describe("how a run ends", () => {
     realtime.setRun({ status: "EXECUTING", metadata: { status: "stopping" } });
     expect(await screen.findByText("Stopping…")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Stopping" })).toBeDisabled();
+  });
+});
+
+describe("the worker's own status", () => {
+  it("'cancelled' makes the page ask the server at once, but only the server ends the run", async () => {
+    await startRun();
+    realtime.push({ type: "text-delta", delta: "partial" });
+    await screen.findByText("partial");
+    const checks = countChecks();
+    realtime.setRun({ status: "EXECUTING", metadata: { status: "cancelled" } });
+    await waitFor(() => expect(checks.n).toBeGreaterThanOrEqual(1));
+    // the server still says the run is going, so it stays
+    await new Promise((r) => setTimeout(r, 150));
+    expect(useChatStore.getState().runs["chat-greeting"]).toBeDefined();
+    expect(screen.getByText("partial")).toBeInTheDocument();
+  });
+
+  it("'complete' and 'failed' also make it ask at once", async () => {
+    for (const status of ["complete", "failed"]) {
+      realtime.reset();
+      const view = await startRun();
+      realtime.push({ type: "text-delta", delta: "x" });
+      const checks = countChecks();
+      realtime.setRun({ status: "EXECUTING", metadata: { status } });
+      await waitFor(() => expect(checks.n).toBeGreaterThanOrEqual(1));
+      server.events.removeAllListeners();
+      view.unmount();
+      useChatStore.setState(useChatStore.getInitialState(), true);
+      getMockDb().runs = {};
+    }
+  });
+
+  it("shows Stopping when the worker says so, even if the stop came from elsewhere", async () => {
+    await startRun();
+    realtime.push({ type: "text-delta", delta: "going" });
+    await screen.findByText("going");
+    realtime.setRun({ status: "EXECUTING", metadata: { status: "stopping" } });
+    expect(await screen.findByText("Stopping…")).toBeInTheDocument();
+    expect(useChatStore.getState().stopping["chat-greeting"]).toBeUndefined();
+  });
+
+  it("shows tool activity from currentTool while 'working'", async () => {
+    await startRun();
+    realtime.setRun({ status: "EXECUTING", metadata: { status: "working", currentTool: { name: "skill", input: { name: "research" }, status: "running" } } });
+    realtime.push({ type: "tool-start", toolCallId: "t1", toolName: "skill", toolInput: { name: "research" } });
+    expect(await screen.findByRole("button", { name: /Working · 1 step/ })).toBeInTheDocument();
+  });
+
+  it("keeps a generated clip inline instead of opening the side panel", async () => {
+    await startRun();
+    realtime.push({ type: "asset", asset: { type: "audio", url: "/mock/chime.wav", altText: "A chime" } });
+    expect(await screen.findByLabelText("A chime")).toBeInTheDocument();
+    expect(useChatStore.getState().artifactPanel.isOpen).toBe(false);
   });
 });

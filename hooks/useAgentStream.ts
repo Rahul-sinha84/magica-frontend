@@ -6,7 +6,7 @@ import { AGENT_STREAM_ID, AgentStreamChunkSchema, AgentStreamMetadataSchema, fol
 import { REALTIME_ENABLED, TRIGGER_API_URL } from "@/lib/config";
 import { REALTIME_RETRY_MS, TOKEN_REFRESH_LEAD_MS } from "@/lib/timing";
 import { useChatStore } from "@/stores/chatStore";
-import type { ContentBlock } from "@/types";
+import type { AgentStreamMetadata, ContentBlock } from "@/types";
 import { useRunWatcher } from "./useRunWatcher";
 
 // Trigger.dev statuses after which the run won't change again. Hearing one only makes us ask our server,
@@ -26,6 +26,10 @@ function validChunk(part: unknown): AgentStreamChunk | null {
   checked.set(part, chunk);
   return chunk;
 }
+
+// The worker's own word that the run is over (it also sends "stopping" as soon as a cancel reaches it, so
+// "Stopping…" shows even when the stop came from another tab or device)
+const METADATA_FINISHED = new Set<AgentStreamMetadata["status"]>(["complete", "failed", "cancelled"]);
 
 // Trigger.dev statuses for a run that is waiting to be picked up
 const TRIGGER_QUEUED = new Set(["QUEUED", "DELAYED", "PENDING_VERSION"]);
@@ -100,11 +104,13 @@ export function useAgentStream(chatId: string): AgentStream | null {
     return parsed.success ? parsed.data : null;
   }, [enabled, failed, realtime.run?.metadata]);
 
-  // Trigger.dev says the run finished: ask the server now instead of at the next check
+  // Trigger.dev, or the run's own metadata, says the run finished: ask the server now instead of at the
+  // next check. Only the server's answer ends the run here.
   const triggerStatus = enabled ? realtime.run?.status : undefined;
+  const metadataFinished = !!metadata && METADATA_FINISHED.has(metadata.status);
   useEffect(() => {
-    if (triggerStatus && TRIGGER_FINISHED.has(triggerStatus)) check();
-  }, [triggerStatus, check]);
+    if ((triggerStatus && TRIGGER_FINISHED.has(triggerStatus)) || metadataFinished) check();
+  }, [triggerStatus, metadataFinished, check]);
 
   // the stream failed: polling has taken over; try the live stream again a little later
   useEffect(() => {

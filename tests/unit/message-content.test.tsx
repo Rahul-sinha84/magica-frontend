@@ -186,3 +186,26 @@ describe("an empty reply", () => {
     expect(screen.getByText("No response.")).toBeInTheDocument();
   });
 });
+
+describe("audio", () => {
+  it("plays inline with a labelled native player and its length", () => {
+    render(<MessageContent blocks={[{ type: "audio", url: "/mock/chime.wav", altText: "A short chime", durationMs: 65_000 }]} chatId="c1" />);
+    const player = screen.getByLabelText("A short chime");
+    expect(player.tagName).toBe("AUDIO");
+    expect(player).toHaveAttribute("controls");
+    expect(player).toHaveAttribute("src", "/mock/chime.wav");
+    expect(screen.getByText("1:05")).toBeInTheDocument();
+  });
+
+  it("falls back to 'Generated audio' without alt text, and shows no length when unknown", () => {
+    render(<MessageContent blocks={[{ type: "audio", url: "/a.mp3" }]} chatId="c1" />);
+    expect(screen.getByLabelText("Generated audio").tagName).toBe("AUDIO");
+    expect(screen.queryByText(/^\d+:\d\d$/)).not.toBeInTheDocument();
+  });
+
+  it("won't load an address that isn't a web address", () => {
+    render(<MessageContent blocks={[{ type: "audio", url: "javascript:alert(1)" }]} chatId="c1" />);
+    expect(screen.getByText("Audio unavailable")).toBeInTheDocument();
+    expect(document.querySelector("audio")).toBeNull();
+  });
+});

@@ -3,6 +3,7 @@ import { screen } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { HomeScreen } from "@/components/chat/HomeScreen";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { makeQueryClient } from "@/lib/queryClient";
 import { renderApp } from "../utils/render";
 
@@ -29,7 +30,9 @@ describe("home screen", () => {
     vi.setSystemTime(new Date(2026, 8, 30, 16, 45));
     const html = renderToString(
       <QueryClientProvider client={makeQueryClient()}>
-        <HomeScreen />
+        <TooltipProvider>
+          <HomeScreen />
+        </TooltipProvider>
       </QueryClientProvider>,
     );
     expect(html).toContain("Your AI worker");

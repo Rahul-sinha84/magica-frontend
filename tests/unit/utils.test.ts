@@ -79,7 +79,7 @@ describe("isTerminalStatus", () => {
   });
 
   it("is false while work is still going", () => {
-    for (const status of ["PENDING", "RUNNING", "thinking", "streaming", "calling-tool", "stopping"] as const) {
+    for (const status of ["PENDING", "RUNNING", "thinking", "working", "stopping"] as const) {
       expect(isTerminalStatus(status)).toBe(false);
     }
   });
@@ -149,5 +149,15 @@ describe("formatMessageTime", () => {
     expect(formatMessageTime(new Date(2026, 8, 30, 23, 15).toISOString(), now)).toBe("Sep 30");
     expect(formatMessageTime(new Date(2025, 11, 31, 9, 0).toISOString(), now)).toBe("Dec 31, 2025");
     expect(formatMessageTime("nonsense", now)).toBe("");
+  });
+});
+
+describe("formatClipLength", () => {
+  it("writes clip lengths like a player", async () => {
+    const { formatClipLength } = await import("@/lib/utils");
+    expect(formatClipLength(7_000)).toBe("0:07");
+    expect(formatClipLength(65_000)).toBe("1:05");
+    expect(formatClipLength(3_723_000)).toBe("1:02:03");
+    expect(formatClipLength(-1)).toBe("");
   });
 });

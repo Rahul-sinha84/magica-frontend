@@ -3,9 +3,9 @@
 import { useState } from "react";
 import { ChevronRight, ImageOff, Maximize2 } from "lucide-react";
 import { groupBlocks, type Segment } from "@/lib/blocks";
-import { assetRatio, cn, formatDuration, safeAssetUrl } from "@/lib/utils";
+import { assetRatio, cn, formatClipLength, formatDuration, safeAssetUrl } from "@/lib/utils";
 import { useChatStore } from "@/stores/chatStore";
-import type { ContentBlock, ImageBlock, VideoBlock } from "@/types";
+import type { AudioBlock, ContentBlock, ImageBlock, VideoBlock } from "@/types";
 import { Markdown } from "./Markdown";
 import { StepGroup } from "./StepGroup";
 
@@ -97,6 +97,28 @@ function Clip({ block, origin }: { block: VideoBlock; origin: Origin }) {
   );
 }
 
+// Generated audio plays in place, with the browser's own controls. Unlike pictures and video it never opens
+// the side panel.
+function Sound({ block }: { block: AudioBlock }) {
+  const src = safeAssetUrl(block.url);
+  const label = block.altText ?? "Generated audio";
+  const length = block.durationMs ? formatClipLength(block.durationMs) : "";
+  if (!src) {
+    return <p className="text-sm text-text-secondary">Audio unavailable</p>;
+  }
+  return (
+    <figure className="w-full max-w-[384px]">
+      <audio src={src} controls preload="metadata" aria-label={label} className="w-full" />
+      {(block.altText || length) && (
+        <figcaption className="mt-1 flex gap-2 text-xs text-text-secondary">
+          {block.altText && <span className="min-w-0 truncate">{block.altText}</span>}
+          {length && <span className="shrink-0 tabular-nums">{length}</span>}
+        </figcaption>
+      )}
+    </figure>
+  );
+}
+
 // Only web links are followed; a source with some other kind of address is shown as plain text.
 function Source({ url, title }: { url: string; title?: string | null }) {
   let parsed: URL | null = null;
@@ -131,6 +153,8 @@ function BlockView({ block, thinkingActive, origin }: { block: Block; thinkingAc
       return <Picture block={block} origin={origin} />;
     case "video":
       return <Clip block={block} origin={origin} />;
+    case "audio":
+      return <Sound block={block} />;
     case "citation":
       return <Source url={block.url} title={block.title} />;
     case "usage":

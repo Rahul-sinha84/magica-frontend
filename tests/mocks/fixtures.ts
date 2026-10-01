@@ -1,6 +1,15 @@
-import type { AgentRun, Chat, ContentBlock, Credits, Message, SendMessageResponse } from "@/types";
+import type { AgentRun, Chat, ContentBlock, Credits, Message, ModelsResponse, SendMessageResponse } from "@/types";
 
 export const MOCK_USER_ID = "user_mock";
+
+// A short clip (public/mock/chime.wav) for replies that include audio.
+export const MOCK_AUDIO: ContentBlock = {
+  type: "audio",
+  url: "/mock/chime.wav",
+  mimeType: "audio/wav",
+  altText: "A short chime",
+  durationMs: 1500,
+};
 
 const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
 
@@ -57,6 +66,7 @@ export interface MockDb {
   // responses already given, keyed by chat and clientMessageId, so a retried send is not repeated
   sent: Record<string, SendMessageResponse>;
   credits: Credits;
+  models: ModelsResponse;
   nextId: number;
 }
 
@@ -76,6 +86,11 @@ export function createMockDb(): MockDb {
     runs: {},
     sent: {},
     credits: { balance: 29_660_000, held: 0 },
+    models: {
+      models: [{ id: "openrouter/free", name: "OpenRouter Free", provider: "openrouter", free: true, isDefault: true }],
+      defaultModelId: "openrouter/free",
+      status: { health: "available", lastRoutedModel: "meta-llama/llama-3.3-70b-instruct:free", checkedAt: new Date().toISOString() },
+    },
     nextId: 1,
   };
 }

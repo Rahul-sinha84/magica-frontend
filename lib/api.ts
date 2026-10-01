@@ -7,6 +7,7 @@ import {
   CreditsResponseSchema,
   ErrorCodeSchema,
   MessageListResponseSchema,
+  ModelsResponseSchema,
   SendMessageResponseSchema,
 } from "@/contracts";
 import { BACKEND_URL } from "./config";
@@ -156,6 +157,10 @@ export function createApi(getToken: GetToken, { timeoutMs = 30_000 } = {}) {
     },
     credits: {
       get: (signal?: AbortSignal) => json("/api/credits", CreditsResponseSchema, { signal }),
+    },
+    models: {
+      // the models on offer (only OpenRouter's free router) and how it has been doing lately
+      get: (signal?: AbortSignal) => json("/api/models", ModelsResponseSchema, { signal }),
     },
   };
 }

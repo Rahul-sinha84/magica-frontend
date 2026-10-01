@@ -10,15 +10,18 @@ import {
 } from "@/contracts";
 import { BACKEND_URL } from "@/lib/config";
 import { truncate } from "@/lib/utils";
-import { getMockDb, MOCK_USER_ID } from "./fixtures";
+import { getMockDb, MOCK_AUDIO, MOCK_USER_ID } from "./fixtures";
 
 // A mock run "streams" for this long, then the assistant reply lands in the conversation.
 export const RUN_MS = 4000;
 export const MOCK_REPLY = "Sure! This answer comes from the mock backend, so you can see how a run streams in.";
 
-// A message asking for a picture gets one in the mock, so the side panel can be tried out.
-const wantsImage = (chatId: string) =>
-  /\b(image|picture|draw|photo)\b/i.test([...(getMockDb().messages[chatId] ?? [])].reverse().find((m) => m.role === "USER")?.content ?? "");
+// A message asking for a picture gets one in the mock, so the side panel can be tried out; one asking for
+// audio gets a short clip.
+const lastAsk = (chatId: string) => [...(getMockDb().messages[chatId] ?? [])].reverse().find((m) => m.role === "USER")?.content ?? "";
+const wantsImage = (chatId: string) => /\b(image|picture|draw|photo)\b/i.test(lastAsk(chatId));
+const wantsAudio = (chatId: string) => /\b(audio|sound|voice|music|song)\b/i.test(lastAsk(chatId));
+
 
 const MOCK_IMAGE: ContentBlock = {
   type: "image",
@@ -33,7 +36,7 @@ const MOCK_IMAGE: ContentBlock = {
 // What a mock run has produced after `progress` (0 to 1) of its time: a short think, one step that runs
 // and then finishes, then the reply text growing (and, when asked for, a picture near the end). The saved
 // reply is the same blocks at 1.
-export function mockRunBlocks(progress: number, { image = false } = {}): ContentBlock[] {
+export function mockRunBlocks(progress: number, { image = false, audio = false } = {}): ContentBlock[] {
   const blocks: ContentBlock[] = [];
   if (progress < 0.1) return blocks;
   blocks.push({ type: "thinking", content: "The user wants a quick answer. Keep it short.", ...(progress >= 0.25 && { durationMs: 900 }) });
@@ -44,6 +47,7 @@ export function mockRunBlocks(progress: number, { image = false } = {}): Content
   const text = MOCK_REPLY.slice(0, Math.floor(MOCK_REPLY.length * Math.max(0, (progress - 0.5) / 0.5)));
   if (text) blocks.push({ type: "text", content: text });
   if (image && progress >= 0.8) blocks.push(MOCK_IMAGE);
+  if (audio && progress >= 0.8) blocks.push(MOCK_AUDIO);
   return blocks;
 }
 
@@ -82,7 +86,7 @@ function settleRun(chatId: string) {
     chatId,
     role: "ASSISTANT",
     content: MOCK_REPLY,
-    contentBlocks: mockRunBlocks(1, { image: wantsImage(chatId) }),
+    contentBlocks: mockRunBlocks(1, { image: wantsImage(chatId), audio: wantsAudio(chatId) }),
     status: "COMPLETED",
     createdAt: now,
     agentRunId: run.id,
@@ -214,7 +218,7 @@ export const handlers = [
     }
     // text grows with elapsed time, like a real stream would
     const progress = Math.min(1, (Date.now() - Date.parse(run.startedAt)) / RUN_MS);
-    const partialBlocks = mockRunBlocks(progress, { image: wantsImage(chatId) });
+    const partialBlocks = mockRunBlocks(progress, { image: wantsImage(chatId), audio: wantsAudio(chatId) });
     const partialText = partialBlocks.map((block) => (block.type === "text" ? block.content : "")).join("") || null;
     return HttpResponse.json({
       run,
@@ -235,7 +239,7 @@ export const handlers = [
     if (run.status !== "RUNNING") return notFound("Active run");
     // like the backend: the run ends at once and whatever was written so far is kept, marked as stopped
     const now = new Date().toISOString();
-    const partial = mockRunBlocks((Date.now() - Date.parse(run.startedAt ?? now)) / RUN_MS, { image: wantsImage(run.chatId) });
+    const partial = mockRunBlocks((Date.now() - Date.parse(run.startedAt ?? now)) / RUN_MS, { image: wantsImage(run.chatId), audio: wantsAudio(run.chatId) });
     run.status = "CANCELLED";
     run.completedAt = now;
     getMockDb().messages[run.chatId]?.push({
@@ -249,6 +253,11 @@ export const handlers = [
       agentRunId: run.id,
     });
     return new HttpResponse(null, { status: 204 });
+  }),
+
+  http.get(url("/api/models"), ({ request }) => {
+    if (!isAuthed(request)) return unauthorized();
+    return HttpResponse.json(getMockDb().models);
   }),
 
   http.get(url("/api/credits"), ({ request }) => {

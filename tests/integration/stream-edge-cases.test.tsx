@@ -142,7 +142,7 @@ describe("runs and Stop requests that outlive their moment", () => {
 describe("the streaming reply", () => {
   it("puts the thinking time on the first think only", async () => {
     running();
-    realtime.setRun({ status: "EXECUTING", metadata: { status: "streaming", thinkingDurationMs: 1500 } });
+    realtime.setRun({ status: "EXECUTING", metadata: { status: "working", thinkingDurationMs: 1500 } });
     realtime.push(
       { type: "thinking-delta", delta: "first" },
       { type: "text-delta", delta: "middle" },

@@ -4,4 +4,5 @@ export * from "./common";
 export * from "./credits";
 export * from "./fold";
 export * from "./messages";
+export * from "./models";
 export * from "./runs";

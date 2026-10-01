@@ -1,12 +1,14 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { Composer } from "@/components/composer/Composer";
+import { renderApp } from "../utils/render";
 
 function setup(props: Partial<React.ComponentProps<typeof Composer>> = {}) {
   const onChange = vi.fn();
   const onSubmit = vi.fn();
-  render(<Composer value="" onChange={onChange} onSubmit={onSubmit} placeholder="Message" {...props} />);
+  // with the app's providers: the model status in the composer asks the (mock) backend
+  renderApp(<Composer value="" onChange={onChange} onSubmit={onSubmit} placeholder="Message" {...props} />);
   return { onChange, onSubmit, box: screen.getByRole("textbox"), send: screen.getByRole("button", { name: "Send message" }) };
 }
 
