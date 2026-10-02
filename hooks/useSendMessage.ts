@@ -4,7 +4,7 @@ import { useRef } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { NO_NUL_MESSAGE, noNul } from "@/contracts";
+import { NO_NUL_MESSAGE, noNul, type RunMode } from "@/contracts";
 import { cancelRun } from "@/lib/cancelRun";
 import { ApiError } from "@/lib/queryClient";
 import { uuid } from "@/lib/uuid";
@@ -76,7 +76,7 @@ export function useSendMessage(chatId: string | null) {
   const inFlight = useRef(false);
   const key = chatId ?? NEW_CHAT;
 
-  async function sendTo(targetId: string, content: string, clientMessageId: string, key: string, files: Attachment[]) {
+  async function sendTo(targetId: string, content: string, clientMessageId: string, key: string, files: Attachment[], mode: RunMode) {
     const store = useChatStore.getState();
 
     // Did the message reach the server after all? Ask it, rather than tell the user it failed.
@@ -120,7 +120,7 @@ export function useSendMessage(chatId: string | null) {
 
     try {
       const attachments = fileIds(files).map((mediaAssetId) => ({ mediaAssetId }));
-      await accepted(await api.messages.send(targetId, { content, clientMessageId, attachments }));
+      await accepted(await api.messages.send(targetId, { content, clientMessageId, attachments, mode }));
     } catch (error) {
       if (isAmbiguous(error) && (await reachedServer())) return accepted(null);
 
@@ -130,7 +130,7 @@ export function useSendMessage(chatId: string | null) {
       latest.clearStopRequest(targetId);
       const typedSince = latest.drafts[key] ?? "";
       latest.setDraft(key, typedSince ? `${content}\n${typedSince}` : content);
-      latest.rememberFailedSend(key, { content, clientMessageId, attachmentIds: fileIds(files) });
+      latest.rememberFailedSend(key, { content, clientMessageId, attachmentIds: fileIds(files), mode });
       giveBackFiles(key, files, error instanceof ApiError ? error : undefined);
 
       if (!(error instanceof ApiError)) throw error;
@@ -151,10 +151,12 @@ export function useSendMessage(chatId: string | null) {
       const store = useChatStore.getState();
       // the files attached in this composer, in order (sending waits until each is in the library)
       const files = useAttachmentsStore.getState().byComposer[key] ?? [];
-      // The same text and files sent again after a failure keep their id, so a first attempt that did arrive
-      // isn't doubled. Different files make it a different message.
+      // as the switch stands when Send is pressed
+      const mode: RunMode = store.planMode ? "plan" : "default";
+      // The same text and files sent again after a failure, in the same mode, keep their id, so a first attempt
+      // that did arrive isn't doubled. Different files, or the other mode, make it a different message.
       const failed = store.failedSends[key];
-      const same = failed?.content === content && sameFiles(failed.attachmentIds, fileIds(files));
+      const same = failed?.content === content && sameFiles(failed.attachmentIds, fileIds(files)) && (failed.mode ?? "default") === mode;
       const clientMessageId = same ? failed.clientMessageId : uuid();
       store.setDraft(key, "");
       useAttachmentsStore.getState().set(key, []);
@@ -184,7 +186,7 @@ export function useSendMessage(chatId: string | null) {
       });
       if (!chatId) router.push(`/chat/${encodeURIComponent(targetId)}`);
       // Once the task exists, a failure belongs to ITS composer: we are on its page by now, not on home.
-      await sendTo(targetId, content, clientMessageId, chatId ? key : targetId, files);
+      await sendTo(targetId, content, clientMessageId, chatId ? key : targetId, files, mode);
     },
     onSettled: () => {
       inFlight.current = false;

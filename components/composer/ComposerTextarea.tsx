@@ -6,11 +6,13 @@ interface Props {
   value: string;
   onChange: (value: string) => void;
   onSubmit?: () => void;
+  // ⇧+Tab: switches plan mode instead of moving focus back
+  onShiftTab?: () => void;
   placeholder: string;
   autoFocus?: boolean;
 }
 
-export function ComposerTextarea({ value, onChange, onSubmit, placeholder, autoFocus }: Props) {
+export function ComposerTextarea({ value, onChange, onSubmit, onShiftTab, placeholder, autoFocus }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null);
 
   // grow with the text, up to the max-h in the class list
@@ -22,6 +24,11 @@ export function ComposerTextarea({ value, onChange, onSubmit, placeholder, autoF
   }, [value]);
 
   function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key === "Tab" && event.shiftKey && !event.nativeEvent.isComposing && onShiftTab) {
+      event.preventDefault();
+      onShiftTab();
+      return;
+    }
     // Enter sends, Shift+Enter adds a line, and Enter while composing (IME) is left alone
     if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing || !onSubmit) return;
     event.preventDefault();

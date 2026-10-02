@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
+import type { RunMode } from "@/contracts";
 import type { ImageBlock, MessageAttachment, VideoBlock } from "@/types";
 
 // The composer draft for the home screen, where there is no chat yet.
@@ -15,11 +16,12 @@ export interface OptimisticMessage {
   attachments?: MessageAttachment[];
 }
 
-// A send that didn't go: sent again with the same text and the same files, it keeps its id.
+// A send that didn't go: sent again with the same text, the same files and the same mode, it keeps its id.
 export interface FailedSend {
   content: string;
   clientMessageId: string;
   attachmentIds?: string[];
+  mode?: RunMode;
 }
 
 // A run the server has started and that has not finished yet.
@@ -78,6 +80,16 @@ interface ChatStore {
   stopRequested: Record<string, true>;
   requestStop: (chatId: string) => void;
   clearStopRequest: (chatId: string) => void;
+
+  // Plan mode (⇧+Tab, or the composer's "Plan" chip): the next messages ask for a plan to approve before anything
+  // is spent. One switch for every composer, as on magica, and not kept across a reload.
+  planMode: boolean;
+  setPlanMode: (on: boolean) => void;
+
+  // waitpoints this tab knows are closed (its own answer came back closed), so their card goes at once, before
+  // the run's own word that it moved on
+  closedWaitpoints: Record<string, true>;
+  closeWaitpoint: (waitpointId: string) => void;
 
   runs: Record<string, RunInFlight>;
   setRun: (chatId: string, run: RunInFlight) => void;
@@ -150,6 +162,12 @@ export const useChatStore = create<ChatStore>()(
       stopRequested: {},
       requestStop: (chatId) => set((s) => ({ stopRequested: { ...s.stopRequested, [chatId]: true } })),
       clearStopRequest: (chatId) => set((s) => ({ stopRequested: without(s.stopRequested, chatId) })),
+
+      planMode: false,
+      setPlanMode: (on) => set({ planMode: on }),
+
+      closedWaitpoints: {},
+      closeWaitpoint: (waitpointId) => set((s) => ({ closedWaitpoints: { ...s.closedWaitpoints, [waitpointId]: true } })),
 
       runs: {},
       setRun: (chatId, run) => set((s) => ({ runs: { ...s.runs, [chatId]: run } })),

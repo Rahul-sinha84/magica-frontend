@@ -8,6 +8,7 @@ import { useChatStore } from "@/stores/chatStore";
 import type { AudioBlock, ContentBlock, ImageBlock, VideoBlock } from "@/types";
 import { Markdown, type PictureFor } from "./Markdown";
 import { StepGroup } from "./StepGroup";
+import { WaitpointStep } from "./WaitpointStep";
 
 type Block = Extract<Segment, { kind: "block" }>["block"];
 
@@ -158,6 +159,8 @@ function BlockView({ block, origin, pictureFor }: { block: Block; origin: Origin
       return <Source url={block.url} title={block.title} />;
     case "usage":
       return null; // shown as the credits line under the reply
+    case "waitpoint":
+      return <WaitpointStep block={block} />;
   }
 }
 
@@ -190,15 +193,23 @@ export function MessageContent({
   chatId,
   createdAt,
   live = false,
-}: { blocks: readonly ContentBlock[]; live?: boolean } & Origin) {
+  paused = false,
+}: {
+  blocks: readonly ContentBlock[];
+  // the reply is being written; `paused` while it waits for the user's answer (nothing is being worked on)
+  live?: boolean;
+  paused?: boolean;
+} & Origin) {
   const origin = useMemo(() => ({ chatId, createdAt }), [chatId, createdAt]);
   // Not shown: usage (it only feeds the credits line), thinking (magica shows it only live, as the
-  // "Thinking" row), and blank text (a reply whose answer is the image its tools made).
+  // "Thinking" row), blank text (a reply whose answer is the image its tools made), and, while the reply is
+  // written, the plan or spend it waits on (that is the card above the composer).
   const segments = groupBlocks(blocks).filter(
     (segment) =>
       segment.kind === "steps" ||
       (segment.block.type !== "usage" &&
         segment.block.type !== "thinking" &&
+        !(live && segment.block.type === "waitpoint" && segment.block.status === "pending") &&
         !((segment.block.type === "text" || segment.block.type === "reasoning") && !segment.block.content.trim())),
   );
   // pictures this reply made that the model also put in its text (as markdown) show there, not again below
@@ -219,7 +230,7 @@ export function MessageContent({
   // as on magica: a "Completed N steps" or "Thought for" row sits 4px above what follows it, and
   // everything else is 16px apart
   const gapAfter = (previous: Segment | undefined) =>
-    !previous ? undefined : previous.kind === "steps" || previous.block.type === "thinking" ? "mt-1" : "mt-4";
+    !previous ? undefined : previous.kind === "steps" || previous.block.type === "thinking" || previous.block.type === "waitpoint" ? "mt-1" : "mt-4";
   const last = flow.at(-1);
 
   return (
@@ -227,7 +238,7 @@ export function MessageContent({
       {flow.map((segment, i) =>
         segment.kind === "steps" ? (
           <div key={`steps-${segment.calls[0].toolCallId}`} className={gapAfter(flow[i - 1])}>
-            <StepGroup calls={segment.calls} results={segment.results} ongoing={live && i === flow.length - 1} />
+            <StepGroup calls={segment.calls} results={segment.results} ongoing={live && !paused && i === flow.length - 1} />
           </div>
         ) : (
           <div key={i} className={gapAfter(flow[i - 1])}>

@@ -1,5 +1,5 @@
 import type { AgentRun, Chat, ContentBlock, Credits, MediaAsset, Message, ModelsResponse, SendMessageResponse } from "@/types";
-import type { UploadFile } from "@/contracts";
+import type { UploadFile, Waitpoint } from "@/contracts";
 
 export const MOCK_USER_ID = "user_mock";
 
@@ -136,7 +136,17 @@ export interface MockDb {
   // the media library (uploads and generated media), and uploads signed but not yet in it
   media: MediaAsset[];
   uploads: Record<string, { file: UploadFile; assetId: string | null }>;
+  // what runs wait on the user for, by id; and the plan-mode runs (by run id): the plans they asked about, in
+  // order, and when one was approved
+  waitpoints: Record<string, Waitpoint>;
+  plans: Record<string, MockPlanRun>;
   nextId: number;
+}
+
+export interface MockPlanRun {
+  chatId: string;
+  waitpointIds: string[];
+  approvedAt: number | null;
 }
 
 const hoursFromNow = (hours: number) => new Date(Date.now() + hours * 3_600_000).toISOString();
@@ -180,6 +190,8 @@ export function createMockDb(): MockDb {
     },
     media: mediaFixtures(),
     uploads: {},
+    waitpoints: {},
+    plans: {},
     nextId: 1,
   };
 }

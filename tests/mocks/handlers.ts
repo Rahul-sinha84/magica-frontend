@@ -8,16 +8,22 @@ import {
   UPLOAD_LIFETIME_MS,
   UpdateChatBodySchema,
   CursorQuerySchema,
+  RespondWaitpointBodySchema,
   SendMessageBodySchema,
+  WAITPOINT_ACTIONS,
+  WAITPOINT_LIFETIME_MS,
+  type AgentRun,
   type Chat,
   type ContentBlock,
   type ErrorCode,
   type MediaAsset,
   type Message,
+  type PlanPayload,
+  type Waitpoint,
 } from "@/contracts";
 import { BACKEND_URL } from "@/lib/config";
 import { truncate } from "@/lib/utils";
-import { getMockDb, MOCK_AUDIO, MOCK_USER_ID } from "./fixtures";
+import { getMockDb, MOCK_AUDIO, MOCK_USER_ID, type MockPlanRun } from "./fixtures";
 
 // A mock run "streams" for this long, then the assistant reply lands in the conversation.
 export const RUN_MS = 4000;
@@ -140,6 +146,105 @@ export function mockRunBlocks(progress: number, ask: Partial<MockAsk> = {}): Con
   return blocks;
 }
 
+// ---- plan mode ----
+// A plan-mode run thinks and loads a skill, then proposes its plan (a waitpoint) and waits for the answer. Run All
+// lets it carry on from there; Request Changes gets a revised plan to answer. Like the rest of the mock, it only
+// moves on when something looks at it.
+const PLAN_ASK_AT = 0.3; // of RUN_MS after the start, the plan is proposed
+const PLAN_RESUME = 0.35; // where the run picks up once the plan is approved
+
+function planPayload(ask: MockAsk, revision: number, feedback?: string): PlanPayload {
+  const steps: PlanPayload["steps"] = [];
+  if (ask.image || ask.fail) steps.push({ title: "Generate the image", description: "GPT Image 2, 1024×1024, medium quality.", tool: "gpt_image_2", estimatedCredits: 70_000 });
+  if (ask.crop) steps.push({ title: "Crop the image", description: "Crop to the subject, keeping it centred.", tool: "crop_image", estimatedCredits: 10_000 });
+  if (ask.merge) steps.push({ title: "Merge the clips", description: "Join them in order with a fade.", tool: "merge_videos", estimatedCredits: 40_000 });
+  if (steps.length === 0) steps.push({ title: "Write the answer", estimatedCredits: 0 });
+  return {
+    title: revision > 0 ? "Revised plan" : "Plan for your request",
+    overview: feedback ? `Updated to: ${feedback}` : "Here is how I would do this. Nothing is generated until you approve.",
+    steps,
+    notes: "Estimates come from each tool's price.",
+    totalCredits: steps.reduce((sum, step) => sum + step.estimatedCredits, 0),
+  };
+}
+
+function askPlan(plan: MockPlanRun, runId: string, now: number, feedback?: string) {
+  const db = getMockDb();
+  const id = newId("wp");
+  db.waitpoints[id] = {
+    id,
+    runId,
+    type: "plan",
+    status: "pending",
+    feedback: null,
+    expiresAt: new Date(now + WAITPOINT_LIFETIME_MS).toISOString(),
+    createdAt: new Date(now).toISOString(),
+    resolvedAt: null,
+    payload: planPayload(mockAsk(plan.chatId), plan.waitpointIds.length, feedback),
+  };
+  plan.waitpointIds.push(id);
+}
+
+// what a run waits on right now, if anything
+const pendingOf = (runId: string) => Object.values(getMockDb().waitpoints).find((w) => w.runId === runId && w.status === "pending") ?? null;
+
+// the waitpoint as the reply shows it
+function waitpointBlock(w: Waitpoint): ContentBlock {
+  const common = {
+    type: "waitpoint" as const,
+    waitpointId: w.id,
+    status: w.status,
+    expiresAt: w.expiresAt,
+    ...(w.feedback && { feedback: w.feedback }),
+    ...(w.resolvedAt && { waitedMs: Date.parse(w.resolvedAt) - Date.parse(w.createdAt) }),
+  };
+  return w.type === "plan" ? { ...common, waitpointType: "plan", payload: w.payload } : { ...common, waitpointType: "credit", payload: w.payload };
+}
+
+// A plan-mode run's reply so far: its think and skill, each plan it proposed (the plan tool's step, then the card),
+// and once a plan is approved, the rest of an ordinary run.
+function planRunBlocks(run: AgentRun, plan: MockPlanRun, done = false): ContentBlock[] {
+  const db = getMockDb();
+  const ask = mockAsk(plan.chatId);
+  const now = Date.now();
+  const elapsed = (now - Date.parse(run.startedAt ?? new Date(now).toISOString())) / RUN_MS;
+  if (plan.waitpointIds.length === 0) return mockRunBlocks(Math.min(elapsed, PLAN_ASK_AT), ask);
+
+  const ordinary = (block: ContentBlock) => block.type !== "tool_call" || block.toolCallId !== "s1-MockMedia1";
+  const blocks = mockRunBlocks(PLAN_RESUME, ask).filter(ordinary);
+  plan.waitpointIds.forEach((id, i) => {
+    const w = db.waitpoints[id];
+    if (!w) return;
+    const toolCallId = `s2-MockPlan${i + 1}`;
+    const answered = w.status !== "pending";
+    blocks.push({ type: "tool_call", toolCallId, toolName: "propose_plan", toolInput: { title: w.type === "plan" ? w.payload.title : "" }, status: answered ? "completed" : "running" });
+    if (answered) blocks.push({ type: "tool_result", toolCallId, toolName: "propose_plan", result: { status: w.status }, isError: false });
+    blocks.push(waitpointBlock(w));
+  });
+  if (plan.approvedAt !== null) {
+    const progress = done ? 1 : Math.min(1, PLAN_RESUME + (now - plan.approvedAt) / RUN_MS);
+    const before = (block: ContentBlock) => block.type === "thinking" || (block.type === "tool_call" && block.toolCallId === "s1-MockSkill1") || (block.type === "tool_result" && block.toolCallId === "s1-MockSkill1");
+    blocks.push(...mockRunBlocks(progress, ask).filter((block) => !before(block)));
+  }
+  return blocks;
+}
+
+// A run's reply so far (or in full, once it is `done`).
+function runBlocks(run: AgentRun, done = false): ContentBlock[] {
+  const plan = getMockDb().plans[run.id];
+  if (plan) return planRunBlocks(run, plan, done);
+  return mockRunBlocks(done ? 1 : (Date.now() - Date.parse(run.startedAt ?? new Date().toISOString())) / RUN_MS, mockAsk(run.chatId));
+}
+
+// Like the backend: a stopped run's open waitpoint closes with it.
+function closeWaitpoints(runId: string, blocks: ContentBlock[]): ContentBlock[] {
+  const now = new Date().toISOString();
+  for (const w of Object.values(getMockDb().waitpoints)) {
+    if (w.runId === runId && w.status === "pending") Object.assign(w, { status: "cancelled", resolvedAt: now });
+  }
+  return blocks.map((block) => (block.type === "waitpoint" && block.status === "pending" ? { ...block, status: "cancelled" as const } : block));
+}
+
 // Like the backend: a turn stopped mid-tool shows that tool as failed, with "Stopped.".
 function stopTools(blocks: ContentBlock[]): ContentBlock[] {
   const out: ContentBlock[] = [];
@@ -180,12 +285,17 @@ function settleRun(chatId: string) {
   const db = getMockDb();
   const run = db.runs[chatId];
   if (!run || run.status !== "RUNNING" || !run.startedAt) return run;
-  if (Date.now() - Date.parse(run.startedAt) < RUN_MS) return run;
+  const plan = db.plans[run.id];
+  if (plan) {
+    // proposes its plan when it is time; finishes only once one is approved, and the rest has run
+    if (plan.waitpointIds.length === 0 && Date.now() - Date.parse(run.startedAt) >= PLAN_ASK_AT * RUN_MS) askPlan(plan, run.id, Date.now());
+    if (plan.approvedAt === null || Date.now() - plan.approvedAt < (1 - PLAN_RESUME) * RUN_MS) return run;
+  } else if (Date.now() - Date.parse(run.startedAt) < RUN_MS) return run;
 
   const now = new Date().toISOString();
   run.status = "COMPLETED";
   run.completedAt = now;
-  const blocks = mockRunBlocks(1, mockAsk(chatId));
+  const blocks = runBlocks(run, true);
   db.messages[chatId].push({
     id: newId("m"),
     chatId,
@@ -439,6 +549,7 @@ export const handlers = [
 
     const triggerRunId = `trigger-${runId}`;
     db.runs[chatId] = { id: runId, chatId, triggerRunId, status: "RUNNING", startedAt: now, completedAt: null };
+    if (body.data.mode === "plan") db.plans[runId] = { chatId, waitpointIds: [], approvedAt: null };
     const response = { message, chatId, runId, triggerRunId, realtimeToken: "mock-realtime-token", realtimeTokenExpiresAt: tokenExpiry() };
     if (dedupeKey) db.sent[dedupeKey] = response;
     return HttpResponse.json(response);
@@ -452,11 +563,10 @@ export const handlers = [
 
     const run = settleRun(chatId);
     if (run?.status !== "RUNNING" || !run.startedAt) {
-      return HttpResponse.json({ run: null, realtimeToken: null, realtimeTokenExpiresAt: null, partialText: null, partialBlocks: [] });
+      return HttpResponse.json({ run: null, realtimeToken: null, realtimeTokenExpiresAt: null, partialText: null, partialBlocks: [], pendingWaitpoint: null });
     }
-    // text grows with elapsed time, like a real stream would
-    const progress = Math.min(1, (Date.now() - Date.parse(run.startedAt)) / RUN_MS);
-    const partialBlocks = mockRunBlocks(progress, mockAsk(chatId));
+    // text grows with elapsed time, like a real stream would; a plan-mode run waits on its plan
+    const partialBlocks = runBlocks(run);
     const partialText = partialBlocks.map((block) => (block.type === "text" ? block.content : "")).join("") || null;
     return HttpResponse.json({
       run,
@@ -464,6 +574,7 @@ export const handlers = [
       realtimeTokenExpiresAt: tokenExpiry(),
       partialText,
       partialBlocks,
+      pendingWaitpoint: pendingOf(run.id),
     });
   }),
 
@@ -477,7 +588,7 @@ export const handlers = [
     if (run.status !== "RUNNING") return notFound("Active run");
     // like the backend: the run ends at once and whatever was written so far is kept, marked as stopped
     const now = new Date().toISOString();
-    const partial = stopTools(mockRunBlocks((Date.now() - Date.parse(run.startedAt ?? now)) / RUN_MS, mockAsk(run.chatId)));
+    const partial = closeWaitpoints(run.id, stopTools(runBlocks(run)));
     run.status = "CANCELLED";
     run.completedAt = now;
     getMockDb().messages[run.chatId]?.push({
@@ -491,6 +602,33 @@ export const handlers = [
       agentRunId: run.id,
     });
     return new HttpResponse(null, { status: 204 });
+  }),
+
+  // The user's answer to a waitpoint, as the backend gives it: only the owner's (anyone else's is a 404), only the
+  // actions its kind allows, Request Changes with something said. A closed one comes back as it stands.
+  http.post(url("/api/waitpoints/:waitpointId/respond"), async ({ request, params }) => {
+    if (!isAuthed(request)) return unauthorized();
+    const db = getMockDb();
+    const waitpoint = db.waitpoints[params.waitpointId as string];
+    if (!waitpoint) return fail(404, "NOT_FOUND", "That approval isn't there any more.");
+    const body = RespondWaitpointBodySchema.safeParse(await request.json().catch(() => null));
+    if (!body.success) return fail(400, "VALIDATION_FAILED", fieldMessage(body.error.issues[0]));
+    const { action, feedback } = body.data;
+    const allowed: readonly string[] = WAITPOINT_ACTIONS[waitpoint.type];
+    if (!allowed.includes(action)) {
+      return fail(400, "VALIDATION_FAILED", `action: ${waitpoint.type === "plan" ? "A plan" : "A spend approval"} can be answered with ${allowed.join(" or ")}.`);
+    }
+    if (action === "request_changes" && !feedback) return fail(400, "VALIDATION_FAILED", "feedback: Say what you'd like changed.");
+    if (waitpoint.status !== "pending") return HttpResponse.json({ waitpoint });
+
+    const now = Date.now();
+    const status = action === "approve" ? "approved" : action === "reject" ? "rejected" : "changes_requested";
+    Object.assign(waitpoint, { status, feedback: feedback ?? null, resolvedAt: new Date(now).toISOString() });
+    // a plan-mode run carries on: with the plan, or with a revised one to answer
+    const plan = db.plans[waitpoint.runId];
+    if (plan && status === "approved") plan.approvedAt = now;
+    if (plan && status === "changes_requested") askPlan(plan, waitpoint.runId, now, feedback);
+    return HttpResponse.json({ waitpoint });
   }),
 
   // Answers the same question again as a new turn that streams through the polling path. A repeated request

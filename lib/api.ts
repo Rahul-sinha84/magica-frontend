@@ -11,11 +11,12 @@ import {
   MediaListResponseSchema,
   MessageListResponseSchema,
   ModelsResponseSchema,
+  RespondWaitpointResponseSchema,
   RetryRunResponseSchema,
   SendMessageResponseSchema,
   UploadResultSchema,
 } from "@/contracts";
-import type { MediaListQuery, SendMessageBody, UpdateChatBody, UploadFile } from "@/contracts";
+import type { MediaListQuery, RespondWaitpointBody, RunMode, SendMessageBody, UpdateChatBody, UploadFile } from "@/contracts";
 import { BACKEND_URL } from "./config";
 import { ApiError } from "./queryClient";
 
@@ -33,6 +34,8 @@ interface SendMessageInput {
   clientMessageId: string;
   // files from the user's media library, in the order they were attached
   attachments?: SendMessageBody["attachments"];
+  // "plan": the agent proposes a plan and waits for the user's approval before spending anything
+  mode?: RunMode;
 }
 
 // the query string for a list request, leaving out what isn't set
@@ -165,10 +168,10 @@ export function createApi(getToken: GetToken, { timeoutMs = 30_000 } = {}) {
           MessageListResponseSchema,
           { signal },
         ),
-      send: (chatId: string, { content, clientMessageId, attachments = [] }: SendMessageInput) =>
+      send: (chatId: string, { content, clientMessageId, attachments = [], mode = "default" }: SendMessageInput) =>
         json(`/api/chats/${enc(chatId)}/messages`, SendMessageResponseSchema, {
           method: "POST",
-          body: { content, clientMessageId, attachments },
+          body: { content, clientMessageId, attachments, mode },
         }),
     },
     uploads: {
@@ -189,6 +192,11 @@ export function createApi(getToken: GetToken, { timeoutMs = 30_000 } = {}) {
       cancel: (runId: string) => empty(`/api/runs/${enc(runId)}/cancel`, { method: "POST" }),
       // answers the same question again as a new turn; 201 for a new retry, 200 if it had already started
       retry: (runId: string) => json(`/api/runs/${enc(runId)}/retry`, RetryRunResponseSchema, { method: "POST" }),
+    },
+    waitpoints: {
+      // the user's answer to what a run is waiting on; an already-closed one comes back as it stands
+      respond: (waitpointId: string, body: RespondWaitpointBody) =>
+        json(`/api/waitpoints/${enc(waitpointId)}/respond`, RespondWaitpointResponseSchema, { method: "POST", body }),
     },
     credits: {
       get: (signal?: AbortSignal) => json("/api/credits", CreditsResponseSchema, { signal }),

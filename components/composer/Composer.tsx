@@ -8,6 +8,7 @@ import { allReady } from "@/hooks/useAttachments";
 import { MAX_MESSAGE_LENGTH } from "@/lib/limits";
 import { cn } from "@/lib/utils";
 import type { Attachment } from "@/stores/attachmentsStore";
+import { useChatStore } from "@/stores/chatStore";
 import type { MediaAsset } from "@/types";
 import { AttachMenu } from "./AttachMenu";
 import { AttachmentChips } from "./AttachmentChips";
@@ -43,6 +44,8 @@ interface Props {
 }
 
 const INERT = "Not available in this build";
+export const PLAN_PLACEHOLDER = "Plan mode — describe what you want planned...";
+const PLAN_TITLE = "Plan mode active — agent can research and estimate; generation waits for approval. Press Shift+Tab to toggle.";
 const action =
   "flex shrink-0 items-center justify-center rounded-full text-icon-secondary outline-none hover:bg-surface-secondary focus-visible:ring-2 focus-visible:ring-ring";
 
@@ -53,6 +56,9 @@ export function Composer({ value, onChange, placeholder, onSubmit, onStop, runni
   const canSend = !!onSubmit && value.trim().length > 0 && !tooLong && !running && !sending && !blocked && filesReady;
   const [libraryOpen, setLibraryOpen] = useState(false);
   const paperclipRef = useRef<HTMLButtonElement>(null);
+  // plan mode belongs to composers that can send
+  const planMode = useChatStore((s) => s.planMode) && !!onSubmit;
+  const setPlanMode = useChatStore((s) => s.setPlanMode);
 
   return (
     <div className="flex min-h-[132px] w-full max-w-[900px] flex-col gap-3 rounded-3xl bg-gradient-to-b from-surface-primary to-surface-main px-4 pb-3 pt-4 shadow-[0_0_0_1px_var(--line-tertiary)]">
@@ -65,7 +71,8 @@ export function Composer({ value, onChange, placeholder, onSubmit, onStop, runni
         // Enter belongs to sending even when sending isn't possible right now (a reply is being written, the
         // box is empty): it does nothing then, rather than slipping a new line into the next message
         onSubmit={onSubmit && (() => canSend && onSubmit())}
-        placeholder={placeholder}
+        onShiftTab={onSubmit && (() => setPlanMode(!planMode))}
+        placeholder={planMode ? PLAN_PLACEHOLDER : placeholder}
         autoFocus={autoFocus}
       />
       {value.length >= MAX_MESSAGE_LENGTH * 0.9 && (
@@ -88,6 +95,19 @@ export function Composer({ value, onChange, placeholder, onSubmit, onStop, runni
         <button type="button" aria-label="Connect apps" title={INERT} aria-disabled="true" className={cn(action, "size-8")}>
           <PlugIcon className="size-5 -rotate-45" />
         </button>
+        {planMode && (
+          // magica's amber chip; clicking it turns plan mode off
+          <button
+            type="button"
+            title={PLAN_TITLE}
+            aria-pressed="true"
+            onClick={() => setPlanMode(false)}
+            className="flex h-7 shrink-0 items-center gap-1 rounded-full bg-plan-surface px-2.5 text-xs font-medium text-plan-text outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <span className="size-1.5 rounded-full bg-current" aria-hidden="true" />
+            Plan
+          </button>
+        )}
         <OpenRouterStatus />
         <div className="ml-auto flex items-center gap-0.5">
           <button type="button" aria-label="Dictation" title={INERT} aria-disabled="true" className={cn(action, "size-[34px]")}>
