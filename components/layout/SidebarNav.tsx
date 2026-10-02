@@ -6,28 +6,34 @@ import { Boxes, CirclePlus, FolderOpen, LifeBuoy, MessageSquareMore, Sparkles } 
 import { ApiBookIcon, BooksIcon } from "@/components/icons";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { useApiKeysDialog, useMobileSidebar } from "@/stores/uiStore";
 
 interface Entry {
   label: string;
   icon: ComponentType<{ className?: string }>;
   href?: string;
   shortcut?: string;
+  // opens the API Keys dialog
+  apiKeys?: boolean;
 }
 
-// Only "New task" goes anywhere; the rest are part of magica.com but outside this build.
+// "New task" goes home and "API / MCP" opens the API Keys dialog; the rest are part of magica.com but outside
+// this build.
 const ENTRIES: Entry[] = [
   { label: "New task", icon: CirclePlus, href: "/chat", shortcut: "⌘⇧O" },
   { label: "Tasks", icon: MessageSquareMore },
   { label: "Projects", icon: FolderOpen },
   { label: "Library", icon: BooksIcon },
   { label: "Tools", icon: Boxes },
-  { label: "API / MCP", icon: ApiBookIcon },
+  { label: "API / MCP", icon: ApiBookIcon, apiKeys: true },
   { label: "Help & Support", icon: LifeBuoy },
   { label: "Unfair Advantage", icon: Sparkles },
 ];
 
 function NavItem({ entry, rail }: { entry: Entry; rail: boolean }) {
   const { label, icon: Icon, href, shortcut } = entry;
+  const openApiKeys = useApiKeysDialog((s) => s.setOpen);
+  const closeDrawer = useMobileSidebar((s) => s.setOpen);
   const className = cn(
     "group flex h-[34px] w-full items-center gap-2.5 rounded-lg px-2 text-sm font-medium text-text-secondary outline-none hover:bg-surface-secondary hover:text-text-primary focus-visible:ring-2 focus-visible:ring-ring",
     rail && "size-[34px] justify-center px-0",
@@ -47,6 +53,20 @@ function NavItem({ entry, rail }: { entry: Entry; rail: boolean }) {
     <Link href={href} aria-label={label} className={className}>
       {content}
     </Link>
+  ) : entry.apiKeys ? (
+    <button
+      type="button"
+      aria-label={label}
+      aria-haspopup="dialog"
+      onClick={() => {
+        // on a phone, the dialog in place of the drawer
+        closeDrawer(false);
+        openApiKeys(true);
+      }}
+      className={className}
+    >
+      {content}
+    </button>
   ) : (
     <button type="button" aria-label={label} aria-disabled="true" title="Not available in this build" className={className}>
       {content}

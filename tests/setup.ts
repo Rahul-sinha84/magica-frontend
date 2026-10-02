@@ -10,6 +10,7 @@ import { transloadit } from "./mocks/transloadit";
 import { server } from "./mocks/server";
 import { useAttachmentsStore } from "@/stores/attachmentsStore";
 import { useChatStore } from "@/stores/chatStore";
+import { useApiKeysDialog } from "@/stores/uiStore";
 
 vi.mock("@clerk/nextjs", async () => (await import("./mocks/clerk")).clerkModule);
 vi.mock("next/navigation", async () => (await import("./mocks/navigation")).navigationModule);
@@ -61,6 +62,7 @@ afterEach(() => {
   resetNavigation();
   realtime.reset();
   useChatStore.setState(useChatStore.getInitialState(), true);
+  useApiKeysDialog.setState({ open: false });
   localStorage.clear();
   sessionStorage.clear();
   setViewport(true);

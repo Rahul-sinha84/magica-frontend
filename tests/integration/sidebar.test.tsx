@@ -108,7 +108,7 @@ describe("navigation", () => {
 
   it("leaves the pages outside this build inert", async () => {
     const { user } = renderApp(<Sidebar />);
-    for (const name of ["Tasks", "Projects", "Library", "Tools", "API / MCP", "Help & Support", "Unfair Advantage"]) {
+    for (const name of ["Tasks", "Projects", "Library", "Tools", "Help & Support", "Unfair Advantage"]) {
       await user.click(screen.getByRole("button", { name }));
     }
     expect(navigation.push).not.toHaveBeenCalled();
@@ -351,7 +351,7 @@ describe("when the browser is offline", () => {
 describe("controls that do nothing in this build", () => {
   it("say so to assistive technology, while the real link does not", () => {
     renderApp(<Sidebar />);
-    for (const name of ["Tasks", "Projects", "Library", "Tools", "API / MCP", "Help & Support", "Unfair Advantage", "Settings"]) {
+    for (const name of ["Tasks", "Projects", "Library", "Tools", "Help & Support", "Unfair Advantage", "Settings"]) {
       expect(screen.getAllByRole("button", { name })[0]).toHaveAttribute("aria-disabled", "true");
     }
     expect(screen.getByRole("link", { name: "New task" })).not.toHaveAttribute("aria-disabled");

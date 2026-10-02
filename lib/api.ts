@@ -1,9 +1,12 @@
 import type { z } from "zod";
 import {
   ActiveRunResponseSchema,
+  ApiKeyListResponseSchema,
+  ApiKeyResponseSchema,
   ChatListResponseSchema,
   ChatResponseSchema,
   ChatSearchResponseSchema,
+  CreateApiKeyResponseSchema,
   CreateChatResponseSchema,
   CreateUploadsResponseSchema,
   CreditsResponseSchema,
@@ -16,7 +19,7 @@ import {
   SendMessageResponseSchema,
   UploadResultSchema,
 } from "@/contracts";
-import type { MediaListQuery, RespondWaitpointBody, RunMode, SendMessageBody, UpdateChatBody, UploadFile } from "@/contracts";
+import type { CreateApiKeyBody, MediaListQuery, RespondWaitpointBody, RunMode, SendMessageBody, UpdateApiKeyBody, UpdateChatBody, UploadFile } from "@/contracts";
 import { BACKEND_URL } from "./config";
 import { ApiError } from "./queryClient";
 
@@ -197,6 +200,16 @@ export function createApi(getToken: GetToken, { timeoutMs = 30_000 } = {}) {
       // the user's answer to what a run is waiting on; an already-closed one comes back as it stands
       respond: (waitpointId: string, body: RespondWaitpointBody) =>
         json(`/api/waitpoints/${enc(waitpointId)}/respond`, RespondWaitpointResponseSchema, { method: "POST", body }),
+    },
+    apiKeys: {
+      // the user's keys (revoked ones aren't listed), newest first, with the "n/10" counter
+      list: (signal?: AbortSignal) => json("/api/api-keys", ApiKeyListResponseSchema, { signal }),
+      // the answer holds the key itself (`secret`): shown once, and never kept anywhere
+      create: (body: CreateApiKeyBody) => json("/api/api-keys", CreateApiKeyResponseSchema, { method: "POST", body }),
+      // rename it, or change its limits
+      update: (apiKeyId: string, body: UpdateApiKeyBody) => json(`/api/api-keys/${enc(apiKeyId)}`, ApiKeyResponseSchema, { method: "PATCH", body }),
+      // for good; revoking it again is harmless
+      revoke: (apiKeyId: string) => empty(`/api/api-keys/${enc(apiKeyId)}`, { method: "DELETE" }),
     },
     credits: {
       get: (signal?: AbortSignal) => json("/api/credits", CreditsResponseSchema, { signal }),

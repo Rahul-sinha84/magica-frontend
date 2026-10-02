@@ -140,8 +140,36 @@ export interface MockDb {
   // order, and when one was approved
   waitpoints: Record<string, Waitpoint>;
   plans: Record<string, MockPlanRun>;
+  // API keys as the backend stores them (revoked ones are kept, and never listed)
+  apiKeys: MockApiKey[];
   nextId: number;
 }
+
+export interface MockApiKey {
+  id: string;
+  label: string;
+  prefix: string;
+  perMinute: number;
+  perDay: number;
+  expiresAt: string | null;
+  lastUsedAt: string | null;
+  createdAt: string;
+  revokedAt: string | null;
+}
+
+// one key, made yesterday and used today
+export const mockApiKey = (over: Partial<MockApiKey> = {}): MockApiKey => ({
+  id: "key-1",
+  label: "Default",
+  prefix: "mgc_Hnz3gjhh",
+  perMinute: 60,
+  perDay: 1000,
+  expiresAt: null,
+  lastUsedAt: minutesAgo(30),
+  createdAt: minutesAgo(24 * 60),
+  revokedAt: null,
+  ...over,
+});
 
 export interface MockPlanRun {
   chatId: string;
@@ -192,6 +220,7 @@ export function createMockDb(): MockDb {
     uploads: {},
     waitpoints: {},
     plans: {},
+    apiKeys: [mockApiKey()],
     nextId: 1,
   };
 }

@@ -1,6 +1,10 @@
 import { http, HttpResponse } from "msw";
 import {
   ChatSearchQuerySchema,
+  CreateApiKeyBodySchema,
+  MAX_ACTIVE_API_KEYS,
+  UpdateApiKeyBodySchema,
+  type ApiKey,
   CompleteUploadBodySchema,
   CreateChatBodySchema,
   CreateUploadsBodySchema,
@@ -23,7 +27,7 @@ import {
 } from "@/contracts";
 import { BACKEND_URL } from "@/lib/config";
 import { truncate } from "@/lib/utils";
-import { getMockDb, MOCK_AUDIO, MOCK_USER_ID, type MockPlanRun } from "./fixtures";
+import { getMockDb, MOCK_AUDIO, MOCK_USER_ID, type MockApiKey, type MockPlanRun } from "./fixtures";
 
 // A mock run "streams" for this long, then the assistant reply lands in the conversation.
 export const RUN_MS = 4000;
@@ -243,6 +247,27 @@ function closeWaitpoints(runId: string, blocks: ContentBlock[]): ContentBlock[] 
     if (w.runId === runId && w.status === "pending") Object.assign(w, { status: "cancelled", resolvedAt: now });
   }
   return blocks.map((block) => (block.type === "waitpoint" && block.status === "pending" ? { ...block, status: "cancelled" as const } : block));
+}
+
+// ---- API keys ----
+// As the backend keeps them: revoked keys stay (never listed), expired ones are listed and don't count.
+
+const KEY_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-";
+const randomKey = (length: number) => Array.from({ length }, () => KEY_CHARS[Math.floor(Math.random() * KEY_CHARS.length)]).join("");
+const KEY_GONE = "That key isn't there any more.";
+
+function keyOf(row: MockApiKey): ApiKey {
+  const { id, label, prefix, perMinute, perDay, expiresAt, lastUsedAt, createdAt } = row;
+  const status = expiresAt && Date.parse(expiresAt) <= Date.now() ? "expired" : "active";
+  return { id, label, prefix, perMinute, perDay, status, expiresAt, lastUsedAt, createdAt };
+}
+
+function keyList() {
+  const apiKeys = getMockDb()
+    .apiKeys.filter((row) => !row.revokedAt)
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+    .map(keyOf);
+  return { apiKeys, activeCount: apiKeys.filter((key) => key.status === "active").length, maxActive: MAX_ACTIVE_API_KEYS };
 }
 
 // Like the backend: a turn stopped mid-tool shows that tool as failed, with "Stopped.".
@@ -601,6 +626,56 @@ export const handlers = [
       createdAt: now,
       agentRunId: run.id,
     });
+    return new HttpResponse(null, { status: 204 });
+  }),
+
+  http.get(url("/api/api-keys"), ({ request }) => {
+    if (!isAuthed(request)) return unauthorized();
+    return HttpResponse.json(keyList());
+  }),
+
+  // the key itself comes back once, here
+  http.post(url("/api/api-keys"), async ({ request }) => {
+    if (!isAuthed(request)) return unauthorized();
+    const body = CreateApiKeyBodySchema.safeParse(await request.json().catch(() => null));
+    if (!body.success) return fail(400, "VALIDATION_FAILED", fieldMessage(body.error.issues[0]));
+    const { label, perMinute, perDay, expiresAt } = body.data;
+    if (expiresAt && Date.parse(expiresAt) <= Date.now()) return fail(400, "VALIDATION_FAILED", "expiresAt: Choose a time in the future.");
+    if (keyList().activeCount >= MAX_ACTIVE_API_KEYS) {
+      return fail(409, "API_KEY_LIMIT_REACHED", `You can have at most ${MAX_ACTIVE_API_KEYS} active API keys. Revoke one to create another.`);
+    }
+    const secret = `mgc_${randomKey(43)}`;
+    const row: MockApiKey = {
+      id: newId("key"),
+      label,
+      prefix: secret.slice(0, 12),
+      perMinute,
+      perDay,
+      expiresAt: expiresAt ?? null,
+      lastUsedAt: null,
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+    getMockDb().apiKeys.push(row);
+    return HttpResponse.json({ apiKey: keyOf(row), secret }, { status: 201 });
+  }),
+
+  http.patch(url("/api/api-keys/:apiKeyId"), async ({ request, params }) => {
+    if (!isAuthed(request)) return unauthorized();
+    const body = UpdateApiKeyBodySchema.safeParse(await request.json().catch(() => null));
+    if (!body.success) return fail(400, "VALIDATION_FAILED", fieldMessage(body.error.issues[0]));
+    const row = getMockDb().apiKeys.find((key) => key.id === params.apiKeyId && !key.revokedAt);
+    if (!row) return fail(404, "NOT_FOUND", KEY_GONE);
+    Object.assign(row, body.data);
+    return HttpResponse.json({ apiKey: keyOf(row) });
+  }),
+
+  // revoking is final, and revoking again changes nothing
+  http.delete(url("/api/api-keys/:apiKeyId"), ({ request, params }) => {
+    if (!isAuthed(request)) return unauthorized();
+    const row = getMockDb().apiKeys.find((key) => key.id === params.apiKeyId);
+    if (!row) return fail(404, "NOT_FOUND", KEY_GONE);
+    row.revokedAt ??= new Date().toISOString();
     return new HttpResponse(null, { status: 204 });
   }),
 
