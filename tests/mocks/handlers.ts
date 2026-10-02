@@ -1,6 +1,8 @@
 import { http, HttpResponse } from "msw";
 import {
+  ChatSearchQuerySchema,
   CreateChatBodySchema,
+  UpdateChatBodySchema,
   CursorQuerySchema,
   SendMessageBodySchema,
   type Chat,
@@ -152,6 +154,9 @@ const fail = (status: number, code: ErrorCode, error: string) => HttpResponse.js
 const unauthorized = () => fail(401, "UNAUTHORIZED", "Unauthorized");
 const notFound = (what: string) => fail(404, "NOT_FOUND", `${what} not found`);
 const newId = (prefix: string) => `${prefix}-${getMockDb().nextId++}`;
+// the backend names the field in a validation message: "q: Type at least 3 characters to search."
+const fieldMessage = (issue: { path: PropertyKey[]; message: string }) =>
+  issue.path.length > 0 ? `${issue.path.map(String).join(".")}: ${issue.message}` : issue.message;
 
 // The cursor is opaque to clients; here it is just an offset into the sorted list.
 function queryOf(request: Request) {
@@ -240,10 +245,43 @@ export const handlers = [
     return HttpResponse.json({ chat });
   }),
 
+  // Like the backend: titles and message text, case ignored, as typed; one entry per chat, latest activity first
+  // (pinned chats are not moved up); at least SEARCH_QUERY_MIN characters. Registered before /api/chats/:chatId,
+  // which would otherwise take "search" for a chat id.
+  http.get(url("/api/chats/search"), ({ request }) => {
+    if (!isAuthed(request)) return unauthorized();
+    const query = ChatSearchQuerySchema.safeParse(Object.fromEntries(new URL(request.url).searchParams));
+    if (!query.success) return fail(400, "VALIDATION_FAILED", fieldMessage(query.error.issues[0]));
+
+    const db = getMockDb();
+    const needle = query.data.q.toLowerCase();
+    const matches = (chat: Chat) =>
+      chat.title.toLowerCase().includes(needle) || (db.messages[chat.id] ?? []).some((m) => (m.content ?? "").toLowerCase().includes(needle));
+    const activity = (chat: Chat) => Date.parse(chat.lastMessageAt ?? chat.createdAt);
+    const all = db.chats.filter(matches).sort((a, b) => activity(b) - activity(a));
+    const start = Number(query.data.cursor ?? 0);
+    const end = start + query.data.limit;
+    return HttpResponse.json({ chats: all.slice(start, end), cursor: end < all.length ? String(end) : null });
+  }),
+
   http.get(url("/api/chats/:chatId"), ({ request, params }) => {
     if (!isAuthed(request)) return unauthorized();
     const chat = getMockDb().chats.find((c) => c.id === params.chatId);
     return chat ? HttpResponse.json({ chat }) : notFound("Chat");
+  }),
+
+  // rename and/or pin
+  http.patch(url("/api/chats/:chatId"), async ({ request, params }) => {
+    if (!isAuthed(request)) return unauthorized();
+    const chat = getMockDb().chats.find((c) => c.id === params.chatId);
+    if (!chat) return notFound("Chat");
+    const body = UpdateChatBodySchema.safeParse(await request.json().catch(() => null));
+    if (!body.success) return fail(400, "VALIDATION_FAILED", fieldMessage(body.error.issues[0]));
+
+    if (body.data.title !== undefined) chat.title = body.data.title;
+    if (body.data.isPinned !== undefined) chat.isPinned = body.data.isPinned;
+    chat.updatedAt = new Date().toISOString();
+    return HttpResponse.json({ chat });
   }),
 
   http.delete(url("/api/chats/:chatId"), ({ request, params }) => {

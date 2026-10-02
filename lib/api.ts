@@ -3,6 +3,7 @@ import {
   ActiveRunResponseSchema,
   ChatListResponseSchema,
   ChatResponseSchema,
+  ChatSearchResponseSchema,
   CreateChatResponseSchema,
   CreditsResponseSchema,
   ErrorCodeSchema,
@@ -11,6 +12,7 @@ import {
   RetryRunResponseSchema,
   SendMessageResponseSchema,
 } from "@/contracts";
+import type { UpdateChatBody } from "@/contracts";
 import { BACKEND_URL } from "./config";
 import { ApiError } from "./queryClient";
 
@@ -137,6 +139,12 @@ export function createApi(getToken: GetToken, { timeoutMs = 30_000 } = {}) {
       create: (title?: string) =>
         json("/api/chats", CreateChatResponseSchema, { method: "POST", body: title ? { title } : {} }),
       delete: (chatId: string) => empty(`/api/chats/${enc(chatId)}`, { method: "DELETE" }),
+      // rename and/or pin; the server answers with the chat as it now is
+      update: (chatId: string, body: UpdateChatBody) =>
+        json(`/api/chats/${enc(chatId)}`, ChatResponseSchema, { method: "PATCH", body }),
+      // titles and message text, at least SEARCH_QUERY_MIN characters; pass back the cursor for the next page
+      search: (q: string, cursor?: string | null, signal?: AbortSignal) =>
+        json(`/api/chats/search?q=${enc(q)}${cursor ? `&cursor=${enc(cursor)}` : ""}`, ChatSearchResponseSchema, { signal }),
     },
     messages: {
       list: (chatId: string, cursor?: string | null, signal?: AbortSignal) =>

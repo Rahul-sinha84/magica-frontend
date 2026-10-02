@@ -8,7 +8,7 @@ import { Search } from "lucide-react";
 import { LayoutSidebarIcon } from "@/components/icons";
 import { useIsDesktop } from "@/hooks/useIsDesktop";
 import { cn } from "@/lib/utils";
-import { useMobileSidebar, useUiStore } from "@/stores/uiStore";
+import { useChatSearchPalette, useMobileSidebar, useUiStore } from "@/stores/uiStore";
 import { SidebarFooter } from "./SidebarFooter";
 import { SidebarNav } from "./SidebarNav";
 import { SidebarTasks } from "./SidebarTasks";
@@ -39,6 +39,12 @@ export function Sidebar() {
   const setMobileOpen = useMobileSidebar((s) => s.setOpen);
   // the icon rail only exists on desktop; the mobile drawer is always the full sidebar
   const rail = collapsed && isDesktop;
+  const setSearchOpen = useChatSearchPalette((s) => s.setOpen);
+  // the search palette, in place of the drawer on a phone
+  function openSearch() {
+    setMobileOpen(false);
+    setSearchOpen(true);
+  }
 
   // close the drawer when you navigate
   useEffect(() => setMobileOpen(false), [pathname, setMobileOpen]);
@@ -85,7 +91,7 @@ export function Sidebar() {
                   <Wordmark />
                 </span>
               </button>
-              <button type="button" aria-label="Search" title="Not available in this build" aria-disabled="true" className={cn(round, "mb-1 mt-4")}>
+              <button type="button" aria-label="Search" aria-keyshortcuts="Meta+K Control+K" onClick={openSearch} className={cn(round, "mb-1 mt-4")}>
                 <Search className="size-4" />
               </button>
             </div>
@@ -99,7 +105,7 @@ export function Sidebar() {
                 <Wordmark />
               </Link>
               <div className="flex items-center gap-0.5">
-                <button type="button" aria-label="Search" title="Not available in this build" aria-disabled="true" className={round}>
+                <button type="button" aria-label="Search" aria-keyshortcuts="Meta+K Control+K" onClick={openSearch} className={round}>
                   <Search className="size-4" />
                 </button>
                 <button

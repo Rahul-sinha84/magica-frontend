@@ -4,6 +4,7 @@ import { useEffect, type ReactNode } from "react";
 import { useChatStore } from "@/stores/chatStore";
 import { useUiStore } from "@/stores/uiStore";
 import { ArtifactPanel } from "@/components/chat/ArtifactPanel";
+import { ChatSearchPalette } from "./ChatSearchPalette";
 import { Sidebar } from "./Sidebar";
 import { SessionGuard } from "./SessionGuard";
 
@@ -20,6 +21,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <Sidebar />
       <main className="flex min-w-0 flex-1 overflow-hidden bg-background md:rounded-3xl">{children}</main>
       <ArtifactPanel />
+      <ChatSearchPalette />
       <SessionGuard />
     </div>
   );

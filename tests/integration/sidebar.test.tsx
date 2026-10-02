@@ -351,10 +351,11 @@ describe("when the browser is offline", () => {
 describe("controls that do nothing in this build", () => {
   it("say so to assistive technology, while the real link does not", () => {
     renderApp(<Sidebar />);
-    for (const name of ["Tasks", "Projects", "Library", "Tools", "API / MCP", "Help & Support", "Unfair Advantage", "Search", "Settings"]) {
+    for (const name of ["Tasks", "Projects", "Library", "Tools", "API / MCP", "Help & Support", "Unfair Advantage", "Settings"]) {
       expect(screen.getAllByRole("button", { name })[0]).toHaveAttribute("aria-disabled", "true");
     }
     expect(screen.getByRole("link", { name: "New task" })).not.toHaveAttribute("aria-disabled");
+    expect(screen.getByRole("button", { name: "Search" })).not.toHaveAttribute("aria-disabled");
   });
 });
 
