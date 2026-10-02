@@ -498,9 +498,9 @@ describe("what the backend refuses to accept", () => {
     expect(message.content).toBe(code);
   });
 
-  it("rejects attachments that aren't http(s) links", async () => {
-    server.use(http.post(at("/api/chats/:chatId/messages"), () => HttpResponse.json({ error: "bad", code: "VALIDATION_FAILED" }, { status: 400 })));
-    expect(await failure(api.messages.send("chat-greeting", { content: "hi", clientMessageId: uuid(), attachments: ["javascript:alert(1)"] }))).toMatchObject({ status: 400 });
+  it("sends attachments as library files, and passes on the server's refusal of one that isn't there", async () => {
+    const error = await failure(api.messages.send("chat-greeting", { content: "hi", clientMessageId: uuid(), attachments: [{ mediaAssetId: "not-mine" }] }));
+    expect(error).toMatchObject({ status: 400, message: "attachments.0: That file isn't in your library." });
   });
 });
 

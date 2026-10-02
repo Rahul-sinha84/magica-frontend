@@ -35,6 +35,7 @@ const asMessage = (p: OptimisticMessage): MessageData => ({
   createdAt: p.createdAt,
   agentRunId: null,
   clientMessageId: p.clientMessageId,
+  ...(p.attachments?.length ? { attachments: p.attachments } : {}),
 });
 
 interface Props {

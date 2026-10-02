@@ -7,6 +7,7 @@ import { Composer } from "@/components/composer/Composer";
 import { useChat } from "@/hooks/useChat";
 import { useMessages } from "@/hooks/useMessages";
 import { useAgentStream } from "@/hooks/useAgentStream";
+import { useComposerAttachments } from "@/hooks/useComposerAttachments";
 import { useRunChecked } from "@/hooks/useRunWatcher";
 import { useSendMessage } from "@/hooks/useSendMessage";
 import { useStopRun } from "@/hooks/useStopRun";
@@ -27,6 +28,7 @@ export function ChatWindow({ chatId }: { chatId: string }) {
   const optimistic = useChatStore((state) => state.optimistic[chatId] ?? NO_PENDING);
   const running = useChatStore((state) => !!state.runs[chatId]);
   const { send, isSending } = useSendMessage(chatId);
+  const attachments = useComposerAttachments(chatId, chatId);
   const stop = useStopRun(chatId);
   const stream = useAgentStream(chatId);
   // Until the server has said whether a run is going (after a reload, a reply may still be on its way), nothing
@@ -91,6 +93,7 @@ export function ChatWindow({ chatId }: { chatId: string }) {
           sending={isSending}
           stopping={stream?.phase === "stopping"}
           blocked={!checked}
+          attachments={attachments}
         />
       </div>
     </div>

@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useParams } from "next/navigation";
 import { Dialog as DialogPrimitive } from "radix-ui";
-import { Box, Calendar, Check, Copy, Download, FileText, Hash, Heart, ImagePlus, Link2, Sparkles, Trash2, Wand2, X } from "lucide-react";
+import { Box, Calendar, Check, CloudUpload, Copy, Download, File as FileIcon, FileText, Hash, Heart, ImagePlus, Link2, Sparkles, Trash2, Wand2, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn, formatPreviewDate, safeAssetUrl } from "@/lib/utils";
 import { useChatStore, type Artifact } from "@/stores/chatStore";
@@ -70,8 +70,13 @@ function Media({ artifact }: { artifact: Artifact }) {
   );
 }
 
+// magica shows a file's name without its extension
+const baseName = (name: string) => name.replace(/\.[^./\\]+$/, "") || name;
+
 function Details({ artifact }: { artifact: Artifact }) {
   const { asset, createdAt } = artifact;
+  const uploaded = artifact.source === "upload";
+  const fileName = artifact.name ? baseName(artifact.name) : null;
   const { copied, copy } = useCopy();
   const link = safeAssetUrl(asset.url);
   const created = createdAt ? formatPreviewDate(createdAt) : "";
@@ -103,15 +108,28 @@ function Details({ artifact }: { artifact: Artifact }) {
             </p>
           </div>
         )}
-        {asset.prompt && <div className="h-px bg-line-tertiary" />}
+        {fileName && (
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-1 text-sm leading-5">
+              <span className="flex size-6 items-center justify-center rounded-[4px] bg-surface-secondary text-text-secondary" aria-hidden="true">
+                <FileIcon className="size-4" />
+              </span>
+              <span className="text-text-secondary">File Name</span>
+            </div>
+            <p title={artifact.name ?? undefined} className="truncate rounded-[10px] border-[0.5px] border-line-secondary bg-surface-secondary px-2 py-2 text-sm leading-5 text-text-primary">
+              {fileName}
+            </p>
+          </div>
+        )}
+        {(asset.prompt || fileName) && <div className="h-px bg-line-tertiary" />}
         <div className="flex flex-col gap-4">
           {created && (
             <Row icon={<Calendar className="size-4" />} label="Created on">
               {created}
             </Row>
           )}
-          <Row icon={<Sparkles className="size-4" />} label="Source">
-            Generated in chat
+          <Row icon={uploaded ? <CloudUpload className="size-4" /> : <Sparkles className="size-4" />} label="Source">
+            {uploaded ? "Uploaded" : "Generated in chat"}
           </Row>
           {asset.model && (
             <Row icon={<Wand2 className="size-4" />} label="Model">
@@ -174,7 +192,8 @@ export function ArtifactPanel() {
 
   // it belongs to one task: moving to another task (or home) closes it
   useEffect(() => {
-    if (isOpen && artifact && artifact.chatId !== chatId) close();
+    // ("" belongs to the home screen, which has no task)
+    if (isOpen && artifact && artifact.chatId !== (chatId ?? "")) close();
   }, [isOpen, artifact, chatId, close]);
 
   // The dialog opens from a picture in the chat rather than from a trigger of its own, so it remembers what

@@ -1,17 +1,75 @@
 "use client";
 
 import { memo } from "react";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Film, Music, TimerOff } from "lucide-react";
 import { useRetryRun } from "@/hooks/useRetryRun";
-import { formatMessageTime } from "@/lib/utils";
+import { previewBlock } from "@/lib/uploadFiles";
+import { formatMessageTime, safeAssetUrl } from "@/lib/utils";
 import { useChatStore } from "@/stores/chatStore";
 import type { Message as MessageData } from "@/types";
 import { CopyButton, MessageActions } from "./MessageActions";
 import { MessageContent } from "./MessageContent";
 
+const tile = "flex size-[60px] items-center justify-center overflow-hidden rounded-[10px] bg-surface-secondary text-text-secondary";
+
+// The files a message carries, above its text and in the order they were attached: a picture (or video) opens in
+// the preview; audio is a tile. A file the upload service has since deleted shows as expired, not as a broken image.
+function Attachments({ message }: { message: MessageData }) {
+  const open = useChatStore((s) => s.openArtifactPanel);
+  const files = message.attachments ?? [];
+  if (files.length === 0) return null;
+  return (
+    <ul aria-label="Attached files" className="mb-2 flex max-w-[448px] flex-wrap justify-end gap-2">
+      {files.map((file) => {
+        const name = file.name ?? file.prompt ?? "Attached file";
+        const block = previewBlock(file);
+        const src = safeAssetUrl(file.url);
+        if (file.expired) {
+          return (
+            <li key={file.id}>
+              <div role="img" aria-label={`${name}: file expired`} title={name} className={`${tile} flex-col gap-0.5 text-center text-[10px] font-medium leading-3`}>
+                <TimerOff className="size-4" aria-hidden="true" />
+                File expired
+              </div>
+            </li>
+          );
+        }
+        if (block && src) {
+          return (
+            <li key={file.id}>
+              <button
+                type="button"
+                aria-label={`Open ${name}`}
+                title={name}
+                onClick={() => open({ chatId: message.chatId, asset: block, createdAt: file.createdAt, openedBy: "user", source: file.source, name: file.name })}
+                className={`${tile} cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring`}
+              >
+                {file.type === "image" ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- files come from anywhere
+                  <img src={src} alt={name} loading="lazy" className="size-full object-cover" />
+                ) : (
+                  <Film className="size-5" aria-hidden="true" />
+                )}
+              </button>
+            </li>
+          );
+        }
+        return (
+          <li key={file.id}>
+            <div role="img" aria-label={`Audio: ${name}`} title={name} className={tile}>
+              <Music className="size-5" aria-hidden="true" />
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 function UserMessage({ message, pending }: { message: MessageData; pending: boolean }) {
   return (
     <div className="group/message flex flex-col items-end">
+      <Attachments message={message} />
       <div className="max-w-[448px] whitespace-pre-wrap break-words rounded-2xl bg-[#f4f4f4] px-4 py-1.5 text-sm leading-5 text-text-primary dark:bg-surface-tertiary">
         {message.content}
       </div>

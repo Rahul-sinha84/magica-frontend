@@ -1,4 +1,5 @@
-import type { AgentRun, Chat, ContentBlock, Credits, Message, ModelsResponse, SendMessageResponse } from "@/types";
+import type { AgentRun, Chat, ContentBlock, Credits, MediaAsset, Message, ModelsResponse, SendMessageResponse } from "@/types";
+import type { UploadFile } from "@/contracts";
 
 export const MOCK_USER_ID = "user_mock";
 
@@ -132,7 +133,28 @@ export interface MockDb {
   sent: Record<string, SendMessageResponse>;
   credits: Credits;
   models: ModelsResponse;
+  // the media library (uploads and generated media), and uploads signed but not yet in it
+  media: MediaAsset[];
+  uploads: Record<string, { file: UploadFile; assetId: string | null }>;
   nextId: number;
+}
+
+const hoursFromNow = (hours: number) => new Date(Date.now() + hours * 3_600_000).toISOString();
+
+// A small library: two generated pictures (today and two days ago) and two uploads (an image and a song).
+function mediaFixtures(): MediaAsset[] {
+  const generated = (id: string, prompt: string, url: string, minutes: number): MediaAsset => ({
+    id, source: "generated", type: "image", url, name: null, prompt, model: "GPT Image 2", width: 1024, height: 1024, mimeType: "image/png", createdAt: minutesAgo(minutes), expiresAt: null,
+  });
+  const upload = (id: string, name: string, type: MediaAsset["type"], mimeType: string, url: string, minutes: number): MediaAsset => ({
+    id, source: "upload", type, url, name, prompt: null, model: null, width: type === "image" ? 800 : null, height: type === "image" ? 600 : null, mimeType, createdAt: minutesAgo(minutes), expiresAt: hoursFromNow(23 - minutes / 60),
+  });
+  return [
+    upload("media-beach", "beach.jpg", "image", "image/jpeg", "/mock/red-apple.svg", 20),
+    generated("media-apple", APPLE_PROMPT, "/mock/red-apple.svg", 25),
+    upload("media-song", "song.mp3", "audio", "audio/mpeg", "/mock/chime.wav", 60),
+    generated("media-cat", "A cat asleep on a windowsill", "/mock/red-apple.svg", 2 * 24 * 60),
+  ];
 }
 
 export function createMockDb(): MockDb {
@@ -156,6 +178,8 @@ export function createMockDb(): MockDb {
       defaultModelId: "openrouter/free",
       status: { health: "available", lastRoutedModel: "meta-llama/llama-3.3-70b-instruct:free", reason: null, checkedAt: new Date().toISOString() },
     },
+    media: mediaFixtures(),
+    uploads: {},
     nextId: 1,
   };
 }

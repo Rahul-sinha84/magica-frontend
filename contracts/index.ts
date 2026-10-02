@@ -7,3 +7,7 @@ export * from "./messages";
 export * from "./models";
 export * from "./runs";
 export * from "./tools";
+export * from "./uploads";
+export * from "./media";
+export * from "./waitpoints";
+export * from "./apikeys";

@@ -9,6 +9,7 @@ import { cancelRun } from "@/lib/cancelRun";
 import { ApiError } from "@/lib/queryClient";
 import { uuid } from "@/lib/uuid";
 import type { Message, SendMessageResponse } from "@/types";
+import { useAttachmentsStore, type Attachment } from "@/stores/attachmentsStore";
 import { NEW_CHAT, useChatStore } from "@/stores/chatStore";
 import { chatsQueryKey } from "./useChats";
 import { creditsQueryKey } from "./useCredits";
@@ -22,6 +23,10 @@ import { useApi } from "./useApi";
 const isAmbiguous = (error: unknown) =>
   error instanceof ApiError && [0, 502, 504, 422].includes(error.status);
 
+// The backend names the field a refusal is about ("attachments.0: …", "files.2.size: …"). The screen already
+// shows which file it is, so a toast gives just the reason.
+export const withoutField = (message: string) => message.replace(/^(?:attachments\.\d+|files\.\d+\.[\w.]+): /, "");
+
 // What to tell the user when the server turns a message (or a retry) down.
 export function explain(error: ApiError) {
   switch (error.code) {
@@ -34,8 +39,25 @@ export function explain(error: ApiError) {
     case "SERVICE_UNAVAILABLE":
       return "The assistant is unavailable right now. Try again shortly.";
     default:
-      return error.message;
+      return withoutField(error.message);
   }
+}
+
+const sameFiles = (a: string[] = [], b: string[] = []) => a.length === b.length && a.every((id, i) => id === b[i]);
+const fileIds = (files: Attachment[]) => files.flatMap((file) => (file.asset ? [file.asset.id] : []));
+
+// The chips of a send that didn't go, back in front of anything attached since. A file the server refused
+// ("attachments.2: This file has expired. Upload it again.") is marked, so it can be removed.
+function giveBackFiles(key: string, files: Attachment[], error?: ApiError) {
+  if (files.length === 0) return;
+  const chips = useAttachmentsStore.getState();
+  const refused = error && /^attachments\.(\d+): (.*)$/.exec(error.message);
+  const marked = files.map((file, index) =>
+    refused && Number(refused[1]) === index
+      ? { ...file, status: /expired/i.test(refused[2]) ? ("expired" as const) : ("failed" as const), error: refused[2] }
+      : file,
+  );
+  chips.set(key, [...marked, ...(chips.byComposer[key] ?? [])]);
 }
 
 // Adds the server's copy of a message to the newest page, so it shows without waiting for a refetch.
@@ -54,7 +76,7 @@ export function useSendMessage(chatId: string | null) {
   const inFlight = useRef(false);
   const key = chatId ?? NEW_CHAT;
 
-  async function sendTo(targetId: string, content: string, clientMessageId: string, key: string) {
+  async function sendTo(targetId: string, content: string, clientMessageId: string, key: string, files: Attachment[]) {
     const store = useChatStore.getState();
 
     // Did the message reach the server after all? Ask it, rather than tell the user it failed.
@@ -66,6 +88,8 @@ export function useSendMessage(chatId: string | null) {
 
     const accepted = async (response: SendMessageResponse | null) => {
       store.forgetFailedSend(key);
+      // the files went with the message; their local previews aren't needed any more
+      for (const file of files) if (file.previewUrl?.startsWith("blob:")) URL.revokeObjectURL(file.previewUrl);
       if (response) {
         queryClient.setQueryData<MessagesData>(messagesQueryKey(targetId), (data) => appendMessage(data, response.message));
         store.setRun(targetId, {
@@ -95,17 +119,19 @@ export function useSendMessage(chatId: string | null) {
     };
 
     try {
-      await accepted(await api.messages.send(targetId, { content, clientMessageId }));
+      const attachments = fileIds(files).map((mediaAssetId) => ({ mediaAssetId }));
+      await accepted(await api.messages.send(targetId, { content, clientMessageId, attachments }));
     } catch (error) {
       if (isAmbiguous(error) && (await reachedServer())) return accepted(null);
 
-      // it did not go: take the message back off the screen and give the text back
+      // it did not go: take the message back off the screen and give the text and files back
       const latest = useChatStore.getState();
       latest.removeOptimistic(targetId, clientMessageId);
       latest.clearStopRequest(targetId);
       const typedSince = latest.drafts[key] ?? "";
       latest.setDraft(key, typedSince ? `${content}\n${typedSince}` : content);
-      latest.rememberFailedSend(key, { content, clientMessageId });
+      latest.rememberFailedSend(key, { content, clientMessageId, attachmentIds: fileIds(files) });
+      giveBackFiles(key, files, error instanceof ApiError ? error : undefined);
 
       if (!(error instanceof ApiError)) throw error;
       if (error.status === 409 && error.code === "RUN_ACTIVE") {
@@ -123,10 +149,15 @@ export function useSendMessage(chatId: string | null) {
   const mutation = useMutation({
     mutationFn: async (content: string) => {
       const store = useChatStore.getState();
-      // the same text sent again after a failure keeps its id, so a first attempt that did arrive isn't doubled
+      // the files attached in this composer, in order (sending waits until each is in the library)
+      const files = useAttachmentsStore.getState().byComposer[key] ?? [];
+      // The same text and files sent again after a failure keep their id, so a first attempt that did arrive
+      // isn't doubled. Different files make it a different message.
       const failed = store.failedSends[key];
-      const clientMessageId = failed?.content === content ? failed.clientMessageId : uuid();
+      const same = failed?.content === content && sameFiles(failed.attachmentIds, fileIds(files));
+      const clientMessageId = same ? failed.clientMessageId : uuid();
       store.setDraft(key, "");
+      useAttachmentsStore.getState().set(key, []);
 
       let targetId = chatId;
       if (!targetId) {
@@ -134,6 +165,7 @@ export function useSendMessage(chatId: string | null) {
           targetId = (await createChat.mutateAsync()).id;
         } catch (error) {
           store.setDraft(key, content);
+          giveBackFiles(key, files);
           if (!(error instanceof ApiError)) throw error;
           if (error.status === 401) throw error;
           toast.error("Couldn't start the task", { description: explain(error) });
@@ -143,10 +175,16 @@ export function useSendMessage(chatId: string | null) {
 
       // a Stop left over from an earlier send whose run never showed up must not cancel this one
       store.clearStopRequest(targetId);
-      store.addOptimistic({ clientMessageId, chatId: targetId, content, createdAt: new Date().toISOString() });
+      store.addOptimistic({
+        clientMessageId,
+        chatId: targetId,
+        content,
+        createdAt: new Date().toISOString(),
+        attachments: files.flatMap((file) => (file.asset ? [{ ...file.asset, expired: false }] : [])),
+      });
       if (!chatId) router.push(`/chat/${encodeURIComponent(targetId)}`);
       // Once the task exists, a failure belongs to ITS composer: we are on its page by now, not on home.
-      await sendTo(targetId, content, clientMessageId, chatId ? key : targetId);
+      await sendTo(targetId, content, clientMessageId, chatId ? key : targetId, files);
     },
     onSettled: () => {
       inFlight.current = false;

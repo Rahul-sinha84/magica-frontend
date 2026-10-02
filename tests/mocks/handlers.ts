@@ -1,13 +1,18 @@
 import { http, HttpResponse } from "msw";
 import {
   ChatSearchQuerySchema,
+  CompleteUploadBodySchema,
   CreateChatBodySchema,
+  CreateUploadsBodySchema,
+  MediaListQuerySchema,
+  UPLOAD_LIFETIME_MS,
   UpdateChatBodySchema,
   CursorQuerySchema,
   SendMessageBodySchema,
   type Chat,
   type ContentBlock,
   type ErrorCode,
+  type MediaAsset,
   type Message,
 } from "@/contracts";
 import { BACKEND_URL } from "@/lib/config";
@@ -206,11 +211,17 @@ function withRetry(chatId: string): Message[] {
   const running = db.runs[chatId]?.status === "RUNNING";
   return all.map((message) => ({
     ...message,
+    // a file's expiry is worked out when the message is read
+    ...(message.attachments ? { attachments: message.attachments.map((file) => ({ ...file, expired: isExpired(file) })) } : {}),
     canRetry: !running && message === last && message.role === "ASSISTANT" && (message.status === "FAILED" || message.status === "CANCELLED"),
   }));
 }
 
 const tokenExpiry = () => new Date(Date.now() + 5 * 60_000).toISOString();
+
+// an upload the upload service has deleted (generated media never expires)
+const isExpired = (asset: Pick<MediaAsset, "expiresAt">) => !!asset.expiresAt && Date.parse(asset.expiresAt) <= Date.now();
+const kindOfMime = (mimeType: string): MediaAsset["type"] => (mimeType.startsWith("video/") ? "video" : mimeType.startsWith("audio/") ? "audio" : "image");
 
 export const handlers = [
   http.get(url("/api/chats"), ({ request }) => {
@@ -270,6 +281,76 @@ export const handlers = [
     return chat ? HttpResponse.json({ chat }) : notFound("Chat");
   }),
 
+  // Like the backend: one signed Transloadit upload per file, in the order given. `params` is the JSON string signed.
+  http.post(url("/api/uploads"), async ({ request }) => {
+    if (!isAuthed(request)) return unauthorized();
+    const body = CreateUploadsBodySchema.safeParse(await request.json().catch(() => null));
+    if (!body.success) return fail(400, "VALIDATION_FAILED", fieldMessage(body.error.issues[0]));
+    const db = getMockDb();
+    const expiresAt = new Date(Date.now() + 30 * 60_000).toISOString();
+    const uploads = body.data.files.map((file) => {
+      const uploadId = newId("upload");
+      db.uploads[uploadId] = { file, assetId: null };
+      const params = JSON.stringify({ auth: { key: "mock-key", expires: expiresAt }, template_id: "mock-template", fields: { uploadId } });
+      return { uploadId, params, signature: `sha384:${"0".repeat(96)}`, expiresAt };
+    });
+    return HttpResponse.json({ uploads });
+  }),
+
+  // The browser says the file reached the upload service; here it is always done, and the file goes into the
+  // library. Asking again gives the same answer, as on the backend.
+  http.post(url("/api/uploads/:uploadId/complete"), async ({ request, params }) => {
+    if (!isAuthed(request)) return unauthorized();
+    const db = getMockDb();
+    const uploadId = params.uploadId as string;
+    const upload = db.uploads[uploadId];
+    if (!upload) return notFound("Upload");
+    const body = CompleteUploadBodySchema.safeParse(await request.json().catch(() => null));
+    if (!body.success) return fail(400, "VALIDATION_FAILED", fieldMessage(body.error.issues[0]));
+    if (!upload.assetId) {
+      const now = Date.now();
+      const type = kindOfMime(upload.file.mimeType);
+      const asset: MediaAsset = {
+        id: newId("media"),
+        source: "upload",
+        type,
+        url: type === "audio" ? "/mock/chime.wav" : "/mock/red-apple.svg",
+        name: upload.file.name,
+        prompt: null,
+        model: null,
+        width: null,
+        height: null,
+        mimeType: upload.file.mimeType,
+        createdAt: new Date(now).toISOString(),
+        expiresAt: new Date(now + UPLOAD_LIFETIME_MS).toISOString(),
+      };
+      db.media.unshift(asset);
+      upload.assetId = asset.id;
+    }
+    const asset = db.media.find((m) => m.id === upload.assetId) ?? null;
+    return HttpResponse.json({ upload: { id: uploadId, status: "completed", errorMessage: null, asset } });
+  }),
+
+  // the media library: newest first, expired uploads left out, by source and by a search of names and prompts
+  http.get(url("/api/media"), ({ request }) => {
+    if (!isAuthed(request)) return unauthorized();
+    const query = MediaListQuerySchema.safeParse(Object.fromEntries(new URL(request.url).searchParams));
+    if (!query.success) return fail(400, "VALIDATION_FAILED", fieldMessage(query.error.issues[0]));
+    const { source, q, cursor, limit } = query.data;
+    const live = getMockDb()
+      .media.filter((asset) => !isExpired(asset))
+      .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+    const needle = q?.toLowerCase();
+    const list = live.filter(
+      (asset) =>
+        (!source || asset.source === source) &&
+        (!needle || (asset.name ?? "").toLowerCase().includes(needle) || (asset.prompt ?? "").toLowerCase().includes(needle)),
+    );
+    const start = Number(cursor ?? 0);
+    const end = start + limit;
+    return HttpResponse.json({ media: list.slice(start, end), cursor: end < list.length ? String(end) : null, total: live.length });
+  }),
+
   // rename and/or pin
   http.patch(url("/api/chats/:chatId"), async ({ request, params }) => {
     if (!isAuthed(request)) return unauthorized();
@@ -324,6 +405,15 @@ export const handlers = [
 
     const dedupeKey = clientMessageId ? `${chatId}:${clientMessageId}` : null;
     if (dedupeKey && db.sent[dedupeKey]) return HttpResponse.json(db.sent[dedupeKey]);
+
+    // each file must be in the user's library and not expired, as the backend checks
+    const files: MediaAsset[] = [];
+    for (const [index, { mediaAssetId }] of body.data.attachments.entries()) {
+      const asset = db.media.find((m) => m.id === mediaAssetId);
+      if (!asset) return fail(400, "VALIDATION_FAILED", `attachments.${index}: That file isn't in your library.`);
+      if (isExpired(asset)) return fail(400, "VALIDATION_FAILED", `attachments.${index}: This file has expired. Upload it again.`);
+      files.push(asset);
+    }
     if (settleRun(chatId)?.status === "RUNNING") {
       return fail(409, "RUN_ACTIVE", "A response is already being generated");
     }
@@ -340,6 +430,7 @@ export const handlers = [
       createdAt: now,
       agentRunId: runId,
       clientMessageId: clientMessageId ?? null,
+      ...(files.length > 0 ? { attachments: files.map((asset) => ({ ...asset, expired: false })) } : {}),
     };
     db.messages[chatId].push(message);
     chat.lastMessageAt = chat.updatedAt = now;

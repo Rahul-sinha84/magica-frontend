@@ -5,14 +5,17 @@ import {
   ChatResponseSchema,
   ChatSearchResponseSchema,
   CreateChatResponseSchema,
+  CreateUploadsResponseSchema,
   CreditsResponseSchema,
   ErrorCodeSchema,
+  MediaListResponseSchema,
   MessageListResponseSchema,
   ModelsResponseSchema,
   RetryRunResponseSchema,
   SendMessageResponseSchema,
+  UploadResultSchema,
 } from "@/contracts";
-import type { UpdateChatBody } from "@/contracts";
+import type { MediaListQuery, SendMessageBody, UpdateChatBody, UploadFile } from "@/contracts";
 import { BACKEND_URL } from "./config";
 import { ApiError } from "./queryClient";
 
@@ -28,7 +31,16 @@ interface SendMessageInput {
   content: string;
   // chosen by the caller so a retry or a lost response can never create a second message
   clientMessageId: string;
-  attachments?: string[];
+  // files from the user's media library, in the order they were attached
+  attachments?: SendMessageBody["attachments"];
+}
+
+// the query string for a list request, leaving out what isn't set
+function search(params: Record<string, string | number | null | undefined>) {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) if (value !== undefined && value !== null && value !== "") query.set(key, String(value));
+  const text = query.toString();
+  return text ? `?${text}` : "";
 }
 
 const enc = encodeURIComponent;
@@ -158,6 +170,18 @@ export function createApi(getToken: GetToken, { timeoutMs = 30_000 } = {}) {
           method: "POST",
           body: { content, clientMessageId, attachments },
         }),
+    },
+    uploads: {
+      // one signed upload per file, in the order given
+      create: (files: UploadFile[]) => json("/api/uploads", CreateUploadsResponseSchema, { method: "POST", body: { files } }),
+      // the browser's word that the file reached the upload service; the server checks and says where it stands
+      complete: (uploadId: string, assemblyId: string) =>
+        json(`/api/uploads/${enc(uploadId)}/complete`, UploadResultSchema, { method: "POST", body: { assemblyId } }),
+    },
+    media: {
+      // the media library, newest first, a page at a time
+      list: ({ source, q, cursor, limit }: Omit<Partial<MediaListQuery>, "cursor"> & { cursor?: string | null }, signal?: AbortSignal) =>
+        json(`/api/media${search({ source, q, cursor, limit })}`, MediaListResponseSchema, { signal }),
     },
     runs: {
       getActive: (chatId: string, signal?: AbortSignal) =>

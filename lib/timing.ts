@@ -8,3 +8,6 @@ export const TOKEN_REFRESH_LEAD_MS = 30_000;
 export const REALTIME_RETRY_MS = 30_000;
 // A turn still waiting in the queue after this long gets a note saying so (most start well before).
 export const QUEUED_NOTICE_MS = 10_000;
+// An upload the server says is still being processed is asked about again this often, for up to this long.
+export const UPLOAD_POLL_MS = 1500;
+export const UPLOAD_POLL_LIMIT_MS = 60_000;
