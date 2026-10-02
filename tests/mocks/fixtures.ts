@@ -154,7 +154,7 @@ export function createMockDb(): MockDb {
     models: {
       models: [{ id: "openrouter/free", name: "OpenRouter Free", provider: "openrouter", free: true, isDefault: true }],
       defaultModelId: "openrouter/free",
-      status: { health: "available", lastRoutedModel: "meta-llama/llama-3.3-70b-instruct:free", checkedAt: new Date().toISOString() },
+      status: { health: "available", lastRoutedModel: "meta-llama/llama-3.3-70b-instruct:free", reason: null, checkedAt: new Date().toISOString() },
     },
     nextId: 1,
   };
