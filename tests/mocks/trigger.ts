@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { useEffect, useState as useReactState, useSyncExternalStore } from "react";
 
 // A stand-in for Trigger.dev's realtime hooks. Tests push stream chunks, set the run's status and
 // metadata, or make the connection fail, and see what the app does. Nothing leaves the test.
@@ -53,11 +53,21 @@ const useState = () => useSyncExternalStore(subscribe, () => state);
 
 type Options = { accessToken?: string; enabled?: boolean; id?: string };
 
-function track(runId: string, options: Options) {
-  const last = realtime.subscriptions.at(-1);
-  if (options.enabled && (!last || last.runId !== runId || last.id !== options.id)) {
-    realtime.subscriptions.push({ runId, accessToken: options.accessToken, id: options.id });
-  }
+// As Trigger.dev's hooks do: a subscription starts when the run or `enabled` changes, NOT when the id or the
+// token does, and what it receives is kept under the id it started with. Read under another id, the hook has
+// nothing (its slot is empty, while the old subscription carries on elsewhere).
+function useSubscription(runId: string, options: Options, record: boolean) {
+  const [startedWith, setStartedWith] = useReactState<string | null>(null);
+  const { enabled, id = "", accessToken } = options;
+  useEffect(() => {
+    if (!enabled || !runId) return;
+    if (record) realtime.subscriptions.push({ runId, accessToken, id: options.id });
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- standing in for the subscription starting
+    setStartedWith(id);
+    return () => setStartedWith(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately not restarted for a new id or token, like the real hooks
+  }, [runId, enabled]);
+  return !!enabled && startedWith === id;
 }
 
 const NO_PARTS: unknown[] = [];
@@ -65,13 +75,12 @@ const NO_PARTS: unknown[] = [];
 export const triggerModule = {
   useRealtimeStream(runId: string, _key: string, options: Options = {}) {
     const current = useState();
-    track(runId, options);
-    const on = !!options.enabled;
+    const on = useSubscription(runId, options, true);
     return { parts: on ? current.parts : NO_PARTS, error: on ? current.streamError : undefined, lastEventId: undefined, stop: () => {} };
   },
-  useRealtimeRun(_runId: string, options: Options = {}) {
+  useRealtimeRun(runId: string, options: Options = {}) {
     const current = useState();
-    const on = !!options.enabled;
+    const on = useSubscription(runId, options, false);
     return { run: on ? current.run : undefined, error: on ? current.runError : undefined, stop: () => {} };
   },
 };

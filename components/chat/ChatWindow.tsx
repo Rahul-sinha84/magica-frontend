@@ -7,6 +7,7 @@ import { Composer } from "@/components/composer/Composer";
 import { useChat } from "@/hooks/useChat";
 import { useMessages } from "@/hooks/useMessages";
 import { useAgentStream } from "@/hooks/useAgentStream";
+import { useRunChecked } from "@/hooks/useRunWatcher";
 import { useSendMessage } from "@/hooks/useSendMessage";
 import { useStopRun } from "@/hooks/useStopRun";
 import { useChatStore } from "@/stores/chatStore";
@@ -28,6 +29,10 @@ export function ChatWindow({ chatId }: { chatId: string }) {
   const { send, isSending } = useSendMessage(chatId);
   const stop = useStopRun(chatId);
   const stream = useAgentStream(chatId);
+  // Until the server has said whether a run is going (after a reload, a reply may still be on its way), nothing
+  // new is sent, and when the conversation ends on the user's own message, the reply's "Thinking" row shows.
+  // The server leaves unfinished replies out of the history, so such a message is still being answered.
+  const checked = useRunChecked(chatId);
   // our own messages stay on screen until the server's copy (same clientMessageId) is in the list
   const pending = useMemo(() => {
     const confirmed = new Set(messages.map((m) => m.clientMessageId).filter(Boolean));
@@ -35,6 +40,7 @@ export function ChatWindow({ chatId }: { chatId: string }) {
   }, [messages, optimistic]);
   // only the server saying "not found" counts; a failed request shouldn't claim the task is gone
   const missing = error instanceof ApiError && error.status === 404;
+  const awaitingReply = !checked && !stream && pending.length === 0 && messages.at(-1)?.role === "USER";
 
   useEffect(() => {
     document.title = chat ? `${chatTitle(chat)} | Magica` : "Magica";
@@ -67,6 +73,7 @@ export function ChatWindow({ chatId }: { chatId: string }) {
           messages={messages}
           pending={pending}
           stream={stream}
+          awaitingReply={awaitingReply}
           hasOlder={!!hasNextPage}
           isLoadingOlder={isFetchingNextPage}
           onLoadOlder={() => void fetchNextPage()}
@@ -83,6 +90,7 @@ export function ChatWindow({ chatId }: { chatId: string }) {
           running={running || isSending || pending.length > 0}
           sending={isSending}
           stopping={stream?.phase === "stopping"}
+          blocked={!checked}
         />
       </div>
     </div>

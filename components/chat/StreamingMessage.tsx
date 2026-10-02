@@ -28,7 +28,7 @@ export const StreamingMessage = memo(function StreamingMessage({ stream }: { str
     // the saved reply is announced once when it lands.
     <div aria-busy="true" aria-live="off">
       {!shown && phase !== "stopping" && <TypingIndicator reasoning={reasoning} />}
-      {shown && <MessageContent blocks={blocks} chatId={stream.chatId} />}
+      {shown && <MessageContent blocks={blocks} chatId={stream.chatId} live />}
       {waiting && waitedLong && (
         <p role="status" className="mt-3 text-sm text-text-secondary">
           Lots of people are using the assistant right now. Your message is queued and will start shortly.

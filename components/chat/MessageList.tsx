@@ -8,6 +8,7 @@ import type { Message as MessageData } from "@/types";
 import { Message } from "./Message";
 import type { AgentStream } from "@/hooks/useAgentStream";
 import { StreamingMessage } from "./StreamingMessage";
+import { TypingIndicator } from "./TypingIndicator";
 
 // Within this many pixels of the bottom counts as "at the bottom": new content keeps you there.
 export const NEAR_BOTTOM_PX = 80;
@@ -17,7 +18,12 @@ const NEAR_TOP_PX = 400;
 const PADDING_START = 40;
 const PADDING_END = 16;
 
-type Item = { key: string; kind: "message"; message: MessageData; pending: boolean } | { key: "streaming"; kind: "streaming"; stream: AgentStream };
+// "waiting": the reply's row before its run is known (after a reload); it has the streaming row's key, so
+// the row carries on, rather than being replaced, when the run turns up
+type Item =
+  | { key: string; kind: "message"; message: MessageData; pending: boolean }
+  | { key: "streaming"; kind: "streaming"; stream: AgentStream }
+  | { key: "streaming"; kind: "waiting" };
 
 const asMessage = (p: OptimisticMessage): MessageData => ({
   id: `pending-${p.clientMessageId}`,
@@ -37,13 +43,15 @@ interface Props {
   pending: OptimisticMessage[];
   // the reply being written, if any
   stream: AgentStream | null;
+  // a reply is on its way but its run isn't known yet: show its "Thinking" row
+  awaitingReply?: boolean;
   hasOlder: boolean;
   isLoadingOlder: boolean;
   onLoadOlder: () => void;
 }
 
 // The conversation. Only the rows on screen exist in the page, however long it is.
-export function MessageList({ messages, pending, stream, hasOlder, isLoadingOlder, onLoadOlder }: Props) {
+export function MessageList({ messages, pending, stream, awaitingReply = false, hasOlder, isLoadingOlder, onLoadOlder }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
   // the row at the top of the screen when older messages were requested, so it can stay put
@@ -64,9 +72,9 @@ export function MessageList({ messages, pending, stream, hasOlder, isLoadingOlde
         .filter((m) => m.role === "USER" || m.role === "ASSISTANT")
         .map((message) => ({ key: message.clientMessageId ?? message.id, kind: "message" as const, message, pending: false })),
       ...pending.map((p) => ({ key: p.clientMessageId, kind: "message" as const, message: asMessage(p), pending: true })),
-      ...(stream ? [{ key: "streaming" as const, kind: "streaming" as const, stream }] : []),
+      ...(stream ? [{ key: "streaming" as const, kind: "streaming" as const, stream }] : awaitingReply ? [{ key: "streaming" as const, kind: "waiting" as const }] : []),
     ],
-    [messages, pending, stream],
+    [messages, pending, stream, awaitingReply],
   );
 
   // the newest reply keeps its footer in view (magica); none while another reply is being written
@@ -182,6 +190,10 @@ export function MessageList({ messages, pending, stream, hasOlder, isLoadingOlde
                 <div className="mx-auto w-full max-w-[900px] px-2 pb-6 sm:px-4">
                   {item.kind === "streaming" ? (
                     <StreamingMessage stream={item.stream} />
+                  ) : item.kind === "waiting" ? (
+                    <div aria-busy="true" aria-live="off">
+                      <TypingIndicator />
+                    </div>
                   ) : (
                     <Message message={item.message} pending={item.pending} latest={item.key === latestReplyKey} />
                   )}

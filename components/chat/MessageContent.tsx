@@ -189,7 +189,8 @@ export function MessageContent({
   blocks,
   chatId,
   createdAt,
-}: { blocks: readonly ContentBlock[] } & Origin) {
+  live = false,
+}: { blocks: readonly ContentBlock[]; live?: boolean } & Origin) {
   const origin = useMemo(() => ({ chatId, createdAt }), [chatId, createdAt]);
   // Not shown: usage (it only feeds the credits line), thinking (magica shows it only live, as the
   // "Thinking" row), and blank text (a reply whose answer is the image its tools made).
@@ -226,7 +227,7 @@ export function MessageContent({
       {flow.map((segment, i) =>
         segment.kind === "steps" ? (
           <div key={`steps-${segment.calls[0].toolCallId}`} className={gapAfter(flow[i - 1])}>
-            <StepGroup calls={segment.calls} results={segment.results} />
+            <StepGroup calls={segment.calls} results={segment.results} ongoing={live && i === flow.length - 1} />
           </div>
         ) : (
           <div key={i} className={gapAfter(flow[i - 1])}>

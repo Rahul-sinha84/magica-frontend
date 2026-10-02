@@ -293,7 +293,12 @@ describe("the real tools while a reply is written", () => {
 
     realtime.push({ type: "tool-end", toolCallId: "s1-AbC123xyz", status: "completed", durationMs: 30_000, creditCost: 70_000, result: { url: "https://cdn.example.com/cat.png", width: 1024, height: 1024 } });
     realtime.setRun({ status: "EXECUTING", metadata: { status: "working" } });
-    // done: the list folds away, as on magica; opened, the step shows its check
+    // the step is done but the agent may take another: the list stays open, and the step shows its check
+    expect(await screen.findByRole("img", { name: "Done" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Working · 1 step/ })).toHaveAttribute("aria-expanded", "true");
+
+    // once it moves on to writing, the list folds away, as on magica; opened, the step is still there
+    realtime.push({ type: "text-delta", delta: "Here is your cat." });
     const header = await screen.findByRole("button", { name: /Completed 1 step/ });
     expect(header).toHaveAttribute("aria-expanded", "false");
     await user.click(header);

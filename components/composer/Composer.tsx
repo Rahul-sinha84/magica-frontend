@@ -21,6 +21,8 @@ interface Props {
   sending?: boolean;
   // Stop was accepted and the server is winding the run down
   stopping?: boolean;
+  // nothing can be sent yet: the server hasn't said whether a reply is still being written here
+  blocked?: boolean;
   autoFocus?: boolean;
 }
 
@@ -28,9 +30,9 @@ const INERT = "Not available in this build";
 const action =
   "flex shrink-0 items-center justify-center rounded-full text-icon-secondary outline-none hover:bg-surface-secondary focus-visible:ring-2 focus-visible:ring-ring";
 
-export function Composer({ value, onChange, placeholder, onSubmit, onStop, running = false, sending = false, stopping = false, autoFocus }: Props) {
+export function Composer({ value, onChange, placeholder, onSubmit, onStop, running = false, sending = false, stopping = false, blocked = false, autoFocus }: Props) {
   const tooLong = value.length > MAX_MESSAGE_LENGTH;
-  const canSend = !!onSubmit && value.trim().length > 0 && !tooLong && !running && !sending;
+  const canSend = !!onSubmit && value.trim().length > 0 && !tooLong && !running && !sending && !blocked;
 
   return (
     <div className="flex min-h-[132px] w-full max-w-[900px] flex-col gap-3 rounded-3xl bg-gradient-to-b from-surface-primary to-surface-main px-4 pb-3 pt-4 shadow-[0_0_0_1px_var(--line-tertiary)]">

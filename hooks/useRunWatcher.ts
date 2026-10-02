@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { cancelRun } from "@/lib/cancelRun";
@@ -26,12 +26,33 @@ function serverStatus(status: string): RunInFlight["status"] | null {
   return status === "PENDING" || status === "RUNNING" ? status : null;
 }
 
+type Retry = boolean | number | ((failureCount: number, error: Error) => boolean) | undefined;
+
+// Whether a query with this retry setting would try a failed request again.
+function wouldRetry(retry: Retry, failureCount: number, error: Error) {
+  if (typeof retry === "function") return retry(failureCount, error);
+  if (typeof retry === "number") return failureCount < retry;
+  return retry ?? failureCount < 3; // React Query's own default
+}
+
+// Whether the server has answered at least once if a run is going for this chat (with a run or without, or
+// with an error). Until then a reply may still be on its way, after a reload say, so nothing new is sent.
+export function useRunChecked(chatId: string) {
+  const queryClient = useQueryClient();
+  return useSyncExternalStore(
+    (onChange) => queryClient.getQueryCache().subscribe(onChange),
+    () => (queryClient.getQueryState(activeRunQueryKey(chatId))?.status ?? "pending") !== "pending",
+    () => false,
+  );
+}
+
 // Keeps the screen in step with the run the server has in flight for this chat. The server owns that
 // fact: opening the page asks for it (so a reload mid-run still shows it), and while a run is going it
-// is checked again: every couple of seconds when there is no live stream, rarely when there is. Only
-// the server can say a run is over. When it does, the reply is loaded BEFORE the run is let go, so the
-// streaming row is replaced by the saved message with nothing in between.
-export function useRunWatcher(chatId: string, { live = false }: { live?: boolean } = {}) {
+// is checked again: every couple of seconds when there is no live stream, rarely when there is, and every
+// couple of seconds again once the live stream says the run finished (`ending`), until the server agrees.
+// Only the server can say a run is over. When it does, the reply is loaded BEFORE the run is let go, so
+// the streaming row is replaced by the saved message with nothing in between.
+export function useRunWatcher(chatId: string, { live = false, ending = false }: { live?: boolean; ending?: boolean } = {}) {
   const api = useApi();
   const queryClient = useQueryClient();
   const run = useChatStore((s) => s.runs[chatId]);
@@ -39,10 +60,18 @@ export function useRunWatcher(chatId: string, { live = false }: { live?: boolean
   const patchRun = useChatStore((s) => s.patchRun);
   const clearRun = useChatStore((s) => s.clearRun);
 
+  // React Query holds a retry back while the page is hidden, and every later check of the same query waits
+  // behind it, so a background tab would sit on a finished run until it was looked at again. So while the
+  // page is hidden a failed check isn't retried (the next scheduled check simply asks again); otherwise the
+  // usual retries apply.
+  const defaultRetry = queryClient.getDefaultOptions().queries?.retry as Retry;
   const { data, dataUpdatedAt, error, refetch } = useQuery({
     queryKey: activeRunQueryKey(chatId),
     queryFn: ({ signal }) => api.runs.getActive(chatId, signal),
-    refetchInterval: run ? (live ? LIVE_POLL_MS : RUN_POLL_MS) : false,
+    refetchInterval: run ? (live && !ending ? LIVE_POLL_MS : RUN_POLL_MS) : false,
+    // a run in flight is followed in a background tab too, or the tab would only learn it ended when looked at
+    refetchIntervalInBackground: !!run,
+    retry: (failureCount, error) => document.visibilityState !== "hidden" && wouldRetry(defaultRetry, failureCount, error),
     refetchOnMount: "always",
     staleTime: 0,
   });

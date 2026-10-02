@@ -79,8 +79,20 @@ export function useAgentStream(chatId: string): AgentStream | null {
   // A new token or a retry starts a fresh subscription. The stream replays from the start, and folding
   // the whole list again gives the same blocks, so nothing is doubled.
   const subscription = `${triggerRunId}:${token ?? ""}:${attempt}`;
+  // Trigger.dev's hooks only start a subscription when the run or `enabled` changes. A new key on its own
+  // would leave them reading an empty slot while the old subscription carries on elsewhere (the run's
+  // status, and its end, would never be heard). So for a new key they are switched off for one render,
+  // then on again, which starts the new subscription.
+  const [subscribed, setSubscribed] = useState(subscription);
+  const restarting = subscribed !== subscription;
+  useEffect(() => {
+    if (!restarting) return;
+    // after the render that switched them off has been committed
+    const timer = setTimeout(() => setSubscribed(subscription), 0);
+    return () => clearTimeout(timer);
+  }, [restarting, subscription]);
   // a render every 50ms is plenty for text appearing, and keeps long replies cheap
-  const options = { accessToken: token, baseURL: TRIGGER_API_URL, enabled, id: subscription, throttleInMs: 50 };
+  const options = { accessToken: token, baseURL: TRIGGER_API_URL, enabled: enabled && !restarting, id: subscription, throttleInMs: 50 };
 
   const stream = useRealtimeStream<unknown>(triggerRunId, AGENT_STREAM_ID, { ...options, timeoutInSeconds: 600 });
   const realtime = useRealtimeRun(triggerRunId, options);
@@ -100,20 +112,22 @@ export function useAgentStream(chatId: string): AgentStream | null {
   // waiting) would flood it. The slow check still catches the end.
   const live = enabled && !failed && (chunks.length > 0 || !!realtime.run);
 
-  const { partial, check, reconnecting } = useRunWatcher(chatId, { live });
-
   const metadata = useMemo(() => {
     const parsed = AgentStreamMetadataSchema.safeParse(enabled && !failed ? realtime.run?.metadata : undefined);
     return parsed.success ? parsed.data : null;
   }, [enabled, failed, realtime.run?.metadata]);
+  const triggerStatus = enabled ? realtime.run?.status : undefined;
+  const metadataFinished = !!metadata && METADATA_FINISHED.has(metadata.status);
+  const runFinished = (!!triggerStatus && TRIGGER_FINISHED.has(triggerStatus)) || metadataFinished;
+
+  // once the live stream says the run finished, the server is asked every couple of seconds until it agrees
+  const { partial, check, reconnecting } = useRunWatcher(chatId, { live, ending: runFinished });
 
   // Trigger.dev, or the run's own metadata, says the run finished: ask the server now instead of at the
   // next check. Only the server's answer ends the run here.
-  const triggerStatus = enabled ? realtime.run?.status : undefined;
-  const metadataFinished = !!metadata && METADATA_FINISHED.has(metadata.status);
   useEffect(() => {
-    if ((triggerStatus && TRIGGER_FINISHED.has(triggerStatus)) || metadataFinished) check();
-  }, [triggerStatus, metadataFinished, check]);
+    if (runFinished) check();
+  }, [runFinished, triggerStatus, check]);
 
   // the stream failed: polling has taken over; try the live stream again a little later
   useEffect(() => {
