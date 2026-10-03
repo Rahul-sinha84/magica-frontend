@@ -1,12 +1,13 @@
 "use client";
 
-import { memo } from "react";
-import { AlertCircle, Film, Music, TimerOff } from "lucide-react";
+import { memo, useState } from "react";
+import { AlertCircle, Download, Film, Music, TimerOff } from "lucide-react";
+import { downloadFiles, fileNameFor } from "@/lib/download";
 import { useRetryRun } from "@/hooks/useRetryRun";
 import { previewBlock } from "@/lib/uploadFiles";
 import { formatMessageTime, safeAssetUrl } from "@/lib/utils";
 import { useChatStore } from "@/stores/chatStore";
-import type { Message as MessageData } from "@/types";
+import type { ContentBlock, Message as MessageData } from "@/types";
 import { CopyButton, MessageActions } from "./MessageActions";
 import { MessageContent } from "./MessageContent";
 
@@ -119,6 +120,47 @@ function StatusBox({ message }: { message: MessageData }) {
   );
 }
 
+// The pictures and videos a reply made, once each, that are safe to fetch.
+function mediaOf(blocks: readonly ContentBlock[]) {
+  const seen = new Set<string>();
+  return blocks.flatMap((block) => {
+    if (block.type !== "image" && block.type !== "video") return [];
+    const url = safeAssetUrl(block.url);
+    if (!url || seen.has(url)) return [];
+    seen.add(url);
+    return [{ url, mimeType: block.mimeType }];
+  });
+}
+
+// magica's "Download all", under a reply that made two or more pictures or videos: it saves each of them.
+function DownloadAll({ blocks }: { blocks: readonly ContentBlock[] }) {
+  const [busy, setBusy] = useState(false);
+  const media = mediaOf(blocks);
+  if (media.length < 2) return null;
+  async function download() {
+    setBusy(true);
+    try {
+      await downloadFiles(media.map((file, i) => ({ url: file.url, name: fileNameFor(file.url, i, file.mimeType) })));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="mt-3 flex items-center justify-end">
+      <button
+        type="button"
+        aria-label={`Download all ${media.length} generated assets`}
+        disabled={busy}
+        onClick={download}
+        className="flex h-[30px] items-center gap-1.5 rounded-[10px] border border-line-tertiary bg-surface-main px-3 text-xs font-medium text-text-primary outline-none hover:bg-surface-primary focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+      >
+        <Download className="size-3.5" aria-hidden="true" />
+        {busy ? "Downloading…" : "Download all"}
+      </button>
+    </div>
+  );
+}
+
 function AssistantMessage({ message, latest }: { message: MessageData; latest: boolean }) {
   const { status, contentBlocks } = message;
   // a plain-text reply with no blocks still has its content
@@ -128,6 +170,7 @@ function AssistantMessage({ message, latest }: { message: MessageData; latest: b
   return (
     <div className="group/message">
       {hasContent && <MessageContent blocks={blocks} chatId={message.chatId} createdAt={message.createdAt} />}
+      {status !== "STREAMING" && <DownloadAll blocks={blocks} />}
       {status === "COMPLETED" && !hasContent && (
         // a finished reply with nothing in it: say so, rather than show a lone row of buttons
         <p className="text-sm text-text-secondary">No response.</p>
