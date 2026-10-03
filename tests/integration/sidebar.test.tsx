@@ -249,7 +249,7 @@ describe("footer", () => {
   it("shows what can still be spent when a run has credits reserved", async () => {
     getMockDb().credits = { balance: 29_660_000, held: 660_000 };
     renderApp(<Sidebar />);
-    expect(await screen.findByText("29.00M")).toBeInTheDocument();
+    expect(await screen.findByText("29M")).toBeInTheDocument();
   });
 
   it("shows a dash instead of a wrong number when credits can't be loaded", async () => {
