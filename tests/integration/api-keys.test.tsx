@@ -1,6 +1,6 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiKeysDialog } from "@/components/apikeys/ApiKeysDialog";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { BACKEND_URL } from "@/lib/config";
@@ -10,6 +10,7 @@ import { server } from "../mocks/server";
 import { renderApp } from "../utils/render";
 
 const at = (path: string) => `${BACKEND_URL}${path}`;
+afterEach(() => vi.unstubAllEnvs());
 const hoursFromNow = (hours: number) => new Date(Date.now() + hours * 3_600_000).toISOString();
 
 // the dialog, open
@@ -50,15 +51,17 @@ describe("opening", () => {
     await user.click(item);
     const dialog = await screen.findByRole("dialog", { name: /API Keys/ });
     expect(within(dialog).getByText(/Create scoped credentials for the REST API and MCP server/)).toBeInTheDocument();
-    // the label field takes focus, as the other dialogs' fields do
-    await waitFor(() => expect(within(dialog).getByRole("textbox", { name: "Key label" })).toHaveFocus());
+    // as on magica, no field takes focus (nor is the label selected): the dialog itself does
+    await waitFor(() => expect(dialog).toHaveFocus());
+    expect(within(dialog).getByRole("textbox", { name: "Key label" })).not.toHaveFocus();
 
     await user.keyboard("{Escape}");
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(item).toHaveFocus();
   });
 
-  it("shows magica's documentation links, which do nothing in this build", async () => {
+  it("keeps API Reference disabled while the docs address isn't set; MCP Server is disabled either way", async () => {
+    vi.stubEnv("NEXT_PUBLIC_DOCS_URL", "");
     const { dialog } = await openDialog();
     for (const name of ["API Reference", "MCP Server"]) {
       const link = within(dialog).getByRole("button", { name });
@@ -66,12 +69,28 @@ describe("opening", () => {
       expect(link).toHaveAttribute("title", "Not available in this build");
     }
   });
+
+  it("API Reference opens the hosted docs once their address is set", async () => {
+    vi.stubEnv("NEXT_PUBLIC_DOCS_URL", "https://magica.mintlify.app");
+    const { dialog } = await openDialog();
+    const link = within(dialog).getByRole("link", { name: "API Reference" });
+    expect(link).toHaveAttribute("href", "https://magica.mintlify.app/");
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    expect(within(dialog).getByRole("button", { name: "MCP Server" })).toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("ignores a docs address that isn't a web address", async () => {
+    vi.stubEnv("NEXT_PUBLIC_DOCS_URL", "javascript:alert(1)");
+    const { dialog } = await openDialog();
+    expect(within(dialog).getByRole("button", { name: "API Reference" })).toHaveAttribute("aria-disabled", "true");
+  });
 });
 
 describe("the list", () => {
   it("shows the counter, each key's masked start, when it was made, and its limits", async () => {
     const { dialog } = await openDialog();
-    expect(counter(dialog)).toHaveTextContent("1 / 10");
+    expect(counter(dialog)).toHaveTextContent("1/10");
     const key = row(dialog, "Default");
     expect(within(key).getByText("mgc_Hnz3gjhh••••••••")).toBeInTheDocument();
     expect(within(key).getByTitle("Created")).toHaveTextContent(/^\d{1,2}\/\d{1,2}\/\d{4}$/);
@@ -86,7 +105,7 @@ describe("the list", () => {
       mockApiKey({ id: "k-old", label: "Old app", prefix: "mgc_Old12345", expiresAt: hoursFromNow(-2), createdAt: hoursFromNow(-100) }),
     ];
     const { dialog } = await openDialog();
-    expect(counter(dialog)).toHaveTextContent("1 / 10");
+    expect(counter(dialog)).toHaveTextContent("1/10");
     // newest first
     expect(within(dialog).getAllByRole("listitem").map((item) => item.querySelector("span")?.textContent)).toEqual(["Staging", "Old app"]);
     expect(within(row(dialog, "Old app")).getByText("Expired")).toBeInTheDocument();
@@ -97,7 +116,7 @@ describe("the list", () => {
   it("has an empty state", async () => {
     getMockDb().apiKeys = [];
     const { dialog } = await openDialog();
-    expect(counter(dialog)).toHaveTextContent("0 / 10");
+    expect(counter(dialog)).toHaveTextContent("0/10");
     expect(within(dialog).getByText("No API keys yet")).toBeInTheDocument();
   });
 
@@ -120,7 +139,7 @@ describe("creating a key", () => {
     expect(within(dialog).getByRole("textbox", { name: "Key label" })).toHaveValue("Default");
     await user.click(createButton(dialog));
     await waitFor(() => expect(sent).toEqual([{ label: "Default", perMinute: 60, perDay: 1000 }]));
-    await waitFor(() => expect(counter(dialog)).toHaveTextContent("2 / 10"));
+    await waitFor(() => expect(counter(dialog)).toHaveTextContent("2/10"));
   });
 
   it("sends the advanced options: limits within range and an expiry at the end of the chosen day", async () => {
@@ -220,7 +239,7 @@ describe("creating a key", () => {
     for (let i = 0; i < 9; i++) getMockDb().apiKeys.push(mockApiKey({ id: `k-${i}`, label: `App ${i}`, prefix: `mgc_App${i}xxxx`, createdAt: hoursFromNow(-2) }));
     await user.click(createButton(dialog));
     expect(await within(dialog).findByRole("alert")).toHaveTextContent("You can have at most 10 active API keys. Revoke one to create another.");
-    await waitFor(() => expect(counter(dialog)).toHaveTextContent("10 / 10"));
+    await waitFor(() => expect(counter(dialog)).toHaveTextContent("10/10"));
     expect(createButton(dialog)).toBeDisabled();
   });
 
@@ -228,7 +247,7 @@ describe("creating a key", () => {
     getMockDb().apiKeys = Array.from({ length: 10 }, (_, i) => mockApiKey({ id: `k-${i}`, label: `App ${i}`, prefix: `mgc_App${i}xxxx` }));
     const sent = bodies("post", "/api/api-keys");
     const { user, dialog } = await openDialog();
-    expect(counter(dialog)).toHaveTextContent("10 / 10");
+    expect(counter(dialog)).toHaveTextContent("10/10");
     expect(createButton(dialog)).toBeDisabled();
     expect(within(dialog).getByText("You can have at most 10 active API keys. Revoke one to create another.")).toBeInTheDocument();
     await user.type(within(dialog).getByRole("textbox", { name: "Key label" }), "{Enter}");
@@ -335,7 +354,7 @@ describe("revoking", () => {
     await user.click(within(dialog).getByRole("button", { name: "Revoke key" }));
     await waitFor(() => expect(within(dialog).queryByText("Default", { selector: "span" })).not.toBeInTheDocument());
     expect(sent).toHaveLength(1);
-    expect(counter(dialog)).toHaveTextContent("0 / 10");
+    expect(counter(dialog)).toHaveTextContent("0/10");
     expect(within(dialog).getByText("No API keys yet")).toBeInTheDocument();
     expect(getMockDb().apiKeys[0].revokedAt).not.toBeNull();
   });
@@ -349,7 +368,7 @@ describe("a key that is gone", () => {
     await user.type(within(dialog).getByRole("textbox", { name: "Rename key" }), " 2{Enter}");
     await waitFor(() => expect(within(dialog).queryByText("mgc_Hnz3gjhh••••••••")).not.toBeInTheDocument());
     expect(await screen.findByText("That key isn't there any more")).toBeInTheDocument();
-    expect(counter(dialog)).toHaveTextContent("0 / 10");
+    expect(counter(dialog)).toHaveTextContent("0/10");
   });
 
   it("a 404 on revoke takes the row away and says so", async () => {

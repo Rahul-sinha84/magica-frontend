@@ -7,6 +7,7 @@ import { Dialog as DialogPrimitive } from "radix-ui";
 import { toast } from "sonner";
 import { API_KEY_LIMITS, CreateApiKeyBodySchema, type ApiKey, type CreateApiKeyBody } from "@/contracts";
 import { keyError, useApiKeyActions, useApiKeys } from "@/hooks/useApiKeys";
+import { docsUrl } from "@/lib/config";
 import { cn } from "@/lib/utils";
 import { useApiKeysDialog } from "@/stores/uiStore";
 
@@ -452,6 +453,7 @@ function KeyRow({ apiKey }: { apiKey: ApiKey }) {
 
 function Body() {
   const { data, isPending, isError, refetch, isRefetching } = useApiKeys(true);
+  const docs = docsUrl();
 
   return (
     <>
@@ -461,7 +463,7 @@ function Body() {
           API Keys
           {data && (
             <span aria-label={`${data.activeCount} of ${data.maxActive} active keys`} className="inline-flex h-5 items-center rounded-[4px] bg-surface-secondary px-2 text-xs font-medium text-text-secondary">
-              {data.activeCount} / {data.maxActive}
+              {data.activeCount}/{data.maxActive}
             </span>
           )}
         </DialogPrimitive.Title>
@@ -501,7 +503,7 @@ function Body() {
         </ul>
       )}
 
-      {/* magica's API / MCP opens its documentation, which isn't part of this build */}
+      {/* the hosted API reference (when its address is set); the MCP server isn't part of this build */}
       <div className="flex flex-col gap-3 border-t border-line-tertiary pt-4 sm:flex-row sm:items-center">
         <div className="flex min-w-0 flex-1 gap-3">
           <BookOpen className="mt-0.5 size-4 shrink-0 text-text-secondary" aria-hidden="true" />
@@ -511,12 +513,22 @@ function Body() {
           </div>
         </div>
         <div className="flex gap-2 max-sm:pl-7">
-          {["API Reference", "MCP Server"].map((name) => (
-            <button key={name} type="button" aria-disabled="true" title={INERT} className={cn(pill, "h-8 cursor-default border border-line-secondary px-3 text-text-secondary")}>
-              {name}
+          {docs ? (
+            <a href={docs} target="_blank" rel="noopener noreferrer" className={cn(pill, "h-8 border border-line-secondary px-3 text-text-primary hover:bg-surface-primary")}>
+              API Reference
+              <ExternalLink className="size-3" aria-hidden="true" />
+            </a>
+          ) : (
+            <button type="button" aria-disabled="true" title={INERT} className={cn(pill, "h-8 cursor-default border border-line-secondary px-3 text-text-secondary")}>
+              API Reference
               <ExternalLink className="size-3" aria-hidden="true" />
             </button>
-          ))}
+          )}
+          {/* there is no MCP server in this build */}
+          <button type="button" aria-disabled="true" title={INERT} className={cn(pill, "h-8 cursor-default border border-line-secondary px-3 text-text-secondary")}>
+            MCP Server
+            <ExternalLink className="size-3" aria-hidden="true" />
+          </button>
         </div>
       </div>
     </>
@@ -540,6 +552,11 @@ export function ApiKeysDialog() {
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-[rgba(10,10,11,0.5)] backdrop-blur-[3px] data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0" />
         <DialogPrimitive.Content
+          // as on magica, no field takes focus when the dialog opens (nor is the label selected); the dialog does
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            (event.currentTarget as HTMLElement | null)?.focus();
+          }}
           // Escape inside a row's editor closes the editor, not the dialog
           onEscapeKeyDown={(event) => {
             if (event.target instanceof Element && event.target.closest("[data-inline-editor]")) event.preventDefault();
@@ -548,7 +565,7 @@ export function ApiKeysDialog() {
             event.preventDefault();
             if (returnFocus.current?.isConnected) returnFocus.current.focus({ preventScroll: true });
           }}
-          className="fixed left-1/2 top-1/2 z-50 flex max-h-[min(84vh,calc(100dvh-32px))] w-[calc(100vw-32px)] max-w-[576px] -translate-x-1/2 -translate-y-1/2 flex-col gap-4 overflow-y-auto rounded-2xl border border-line-tertiary bg-surface-main p-6 text-text-primary shadow-[0_12px_16px_-4px_rgba(26,26,24,0.1),0_4px_6px_-2px_rgba(26,26,24,0.05)] outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 max-sm:p-4"
+          className="fixed left-1/2 top-1/2 z-50 flex max-h-[min(84vh,calc(100dvh-32px))] w-[calc(100vw-32px)] max-w-[576px] -translate-x-1/2 -translate-y-1/2 flex-col gap-4 overflow-y-auto rounded-2xl border border-line-tertiary bg-surface-main p-6 text-text-primary shadow-[var(--shadow-floating-lg)] outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 max-sm:p-4"
         >
           <Body />
           <DialogPrimitive.Close aria-label="Close" className="absolute right-4 top-4 rounded-md text-text-primary opacity-70 outline-none hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring">
