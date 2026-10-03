@@ -28,10 +28,12 @@ pnpm dev                           # http://localhost:3001
 | `FRONTEND_ORIGIN` (backend) | `http://localhost:3001` | this app's deployed origin |
 | Clerk keys | the same instance on both sides | the same instance on both sides |
 | `NEXT_PUBLIC_TRIGGER_API_URL` | empty | empty |
+| `NEXT_PUBLIC_DOCS_URL` | the hosted API reference, or empty | the hosted API reference |
 
 - **`FRONTEND_ORIGIN` must equal this app's origin exactly.** The backend uses it for CORS and as Clerk's `authorizedParties`, so a token minted for any other site is refused. Vercel preview URLs are refused by design; only the production origin works.
 - **Same Clerk instance:** the backend verifies the session token this app sends, so both sides need keys from one Clerk instance.
 - **`NEXT_PUBLIC_TRIGGER_API_URL` stays empty.** The live stream then goes to Trigger.dev's cloud, which is what the backend uses. No Trigger.dev key goes here: the backend hands the browser a short-lived token for each run.
+- **`NEXT_PUBLIC_DOCS_URL`** is the address of the backend's hosted API reference (its Mintlify docs). The API Keys dialog's "API Reference" opens it; while it's unset, that link is disabled.
 
 ### Mock mode (no backend)
 
@@ -146,15 +148,17 @@ The conversation uses `@tanstack/react-virtual` with measured rows:
 ### Search, pin and rename
 
 - **Search:** ⌘K / Ctrl+K (or the sidebar's search button) opens a palette. It shows recent tasks until you type, then searches titles and message text from 3 characters.
-- **Task menu:** pin to top, inline rename, delete. ⌘⇧O / Ctrl⇧O starts a new task.
+- **Task menu:** pin to top, inline rename, delete. ⌘⇧O / Ctrl⇧O starts a new task, and ⌘B / Ctrl+B shows or hides the sidebar.
 
 ### API keys
 
 - **Opening:** the sidebar's **API / MCP** opens the API Keys dialog.
 - **The dialog:**
-  - the "n / 10" counter;
+  - the "n/10" counter;
   - a label and Create key, with optional per-minute and per-day limits and an expiry date;
-  - the key list with masked prefixes, each to rename or re-limit inline, or revoke after a confirmation.
+  - the key list with masked prefixes, each to rename or re-limit inline, or revoke after a confirmation;
+  - "API Reference", which opens the hosted docs (`NEXT_PUBLIC_DOCS_URL`).
+- **What the keys are for:** the backend's public REST API (`/v1`), documented in its Mintlify docs.
 - **The key itself** is shown once, with Copy. It's held only in the dialog's state, never in the query cache, and is gone when the dialog closes.
 
 ### Image Preview
@@ -162,6 +166,7 @@ The conversation uses `@tanstack/react-virtual` with measured rows:
 - **Layout:** magica's centered Image / Video Preview: the picture on the left, its details on the right.
 - **Details:** prompt with Copy, file name for uploads, created on, source, model, dimensions, format, Copy Link and Download.
 - **When it opens:** only when a picture is clicked.
+- **Download all:** a reply that made two or more pictures or videos has a "Download all" button that saves each file.
 - **On phones:** a sheet from the bottom.
 
 ## Contracts
@@ -188,7 +193,7 @@ The conversation uses `@tanstack/react-virtual` with measured rows:
 | Uploads live on **Transloadit's temporary storage** and expire (23 hours here; Transloadit deletes after 24) | No storage bucket in this build; the app marks files expired an hour early, so a link never dies mid-turn |
 | **Attachments reach the model as links** (`[Attached image: <url>]`), not as images | The backend writes each file into the prompt as its link, and tools like Crop Image work from that link; no image is sent for the model to see |
 | **No model switching.** "Magica Auto" is shown but inert, and the composer shows the OpenRouter Free status | The backend runs every turn on OpenRouter's free router |
-| **API / MCP** opens the API Keys dialog | On magica it opens the docs, and keys live under Settings → API Keys; Settings isn't built here. The docs links in the dialog are inert |
+| **API / MCP** opens the API Keys dialog | On magica it opens the docs, and keys live under Settings → API Keys; Settings isn't built here. The dialog links to the hosted API reference instead; "MCP Server" is inert |
 | API keys start `mgc_`, with the contract's limits: 1–10,000 per minute, 1–100,000 per day | magica's start `gx_` and allow 1–100 per minute, up to 144,000 per day |
 | **Revoking a key asks first** | magica's confirmation couldn't be checked without revoking a real key |
 | The **spend approval card** is designed here | No magica spend card was seen without spending real credits |
@@ -200,7 +205,7 @@ The conversation uses `@tanstack/react-virtual` with measured rows:
 - **Pages:** Tasks, Projects, Library and Tools; Help & Support, Unfair Advantage, Settings, Updates and Invite team members.
 - **Billing:** pricing, Add Credits and Upgrade.
 - **Composer:** connectors (the plug) and voice (the mic).
-- **Not built:** model switching, the MCP server and the public REST API.
+- **Not built:** model switching and the MCP server. (The public REST API is built, in the backend: `/v1`, used with the keys this app creates, with its Mintlify docs.)
 - **Home:** the template gallery.
 - **On messages and tasks:** branching (fork) and 👍 / 👎 feedback, Duplicate in the task menu, "View all" tasks, and the header's files button.
 - **On pictures:** "Use as reference", and the preview's Add to Favorite and Delete File.
@@ -210,7 +215,7 @@ The conversation uses `@tanstack/react-virtual` with measured rows:
 - **Step by Step** plan runs, with an approval per step.
 - **Real storage** (S3 or R2) for uploads, so files don't expire. That would also enable the Media Library's favorites, folders, sort, filter and list view, and Delete File.
 - **Vision:** send attached images to a vision model rather than as links.
-- **MCP server and the public REST API**, with their documentation.
+- **An MCP server** on top of the public REST API, with its documentation.
 - **End-to-end tests against the real backend:** signed-in Playwright runs (a Clerk testing token) through a real Trigger.dev run, an upload and an approval.
 - **Model switching**, with the model picker.
 - **The Settings dialog**, so API keys also live where magica keeps them.
