@@ -61,7 +61,8 @@ export function Composer({ value, onChange, placeholder, onSubmit, onStop, runni
   const setPlanMode = useChatStore((s) => s.setPlanMode);
 
   return (
-    <div className="flex min-h-[132px] w-full max-w-[900px] flex-col gap-3 rounded-3xl bg-gradient-to-b from-surface-primary to-surface-main px-4 pb-3 pt-4 shadow-[0_0_0_1px_var(--line-tertiary)]">
+    // magica's ring: light at rest (and when only focused), a mid grey while hovered. In dark mode the box is solid.
+    <div className="flex min-h-[132px] w-full max-w-[900px] flex-col gap-3 rounded-3xl bg-gradient-to-b from-surface-primary to-surface-main px-4 pb-3 pt-4 shadow-[inset_0_0_0_1px_var(--line-secondary)] transition-shadow hover:shadow-[inset_0_0_0_1px_var(--line-primary)] dark:bg-surface-primary dark:bg-none dark:shadow-[inset_0_0_0_0.3px_var(--line-tertiary)] dark:hover:shadow-[inset_0_0_0_1px_var(--line-primary)]">
       {attachments && (
         <AttachmentChips items={attachments.items} onRemove={attachments.onRemove} onRetry={attachments.onRetry} onOpen={attachments.onOpen} />
       )}
@@ -89,11 +90,11 @@ export function Composer({ value, onChange, placeholder, onSubmit, onStop, runni
           <AttachMenu triggerRef={paperclipRef} onPickFiles={attachments.onPickFiles} onSelectAsset={() => setLibraryOpen(true)} />
         ) : (
           <button type="button" aria-label="Attach files" title={INERT} aria-disabled="true" className={cn(action, "size-8")}>
-            <Paperclip className="size-4" />
+            <Paperclip className="size-4" strokeWidth={1.75} />
           </button>
         )}
         <button type="button" aria-label="Connect apps" title={INERT} aria-disabled="true" className={cn(action, "size-8")}>
-          <PlugIcon className="size-5 -rotate-45" />
+          <PlugIcon className="size-4 -rotate-45" />
         </button>
         {planMode && (
           // magica's amber chip; clicking it turns plan mode off
@@ -111,7 +112,7 @@ export function Composer({ value, onChange, placeholder, onSubmit, onStop, runni
         <OpenRouterStatus />
         <div className="ml-auto flex items-center gap-0.5">
           <button type="button" aria-label="Dictation" title={INERT} aria-disabled="true" className={cn(action, "size-[34px]")}>
-            <Mic className="size-4" />
+            <Mic className="size-4" strokeWidth={1.75} />
           </button>
           <SendButton running={running} sending={sending} stopping={stopping} canSend={canSend} onSend={() => onSubmit?.()} onStop={() => onStop?.()} />
         </div>

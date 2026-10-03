@@ -281,7 +281,7 @@ export function ChatSearchPalette() {
             event.preventDefault();
             if (returnFocus.current?.isConnected) returnFocus.current.focus({ preventScroll: true });
           }}
-          className="fixed left-1/2 top-1/2 z-50 flex h-[370px] max-h-[90vh] w-[calc(100vw-32px)] max-w-[512px] -translate-x-1/2 -translate-y-1/2 flex-col rounded-3xl bg-surface-main p-1 shadow-lg outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95"
+          className="fixed left-1/2 top-1/2 z-50 flex h-[370px] max-h-[90vh] w-[calc(100vw-32px)] max-w-[512px] -translate-x-1/2 -translate-y-1/2 flex-col rounded-3xl bg-surface-main p-1 shadow-[var(--shadow-floating)] outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95"
         >
           <DialogPrimitive.Title className="sr-only">Search tasks</DialogPrimitive.Title>
           <DialogPrimitive.Description className="sr-only">

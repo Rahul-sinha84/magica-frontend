@@ -5,7 +5,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Dialog as DialogPrimitive } from "radix-ui";
 import { format, isToday, isYesterday } from "date-fns";
 import {
-  ArrowDownUp,
   ChevronDown,
   CloudUpload,
   Download,
@@ -13,11 +12,9 @@ import {
   Film,
   Folder,
   Heart,
-  LayoutGrid,
   Link2,
   Music,
   RefreshCw,
-  Rows3,
   Search,
   SlidersHorizontal,
   Sparkles,
@@ -25,6 +22,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { AttachmentChips } from "@/components/composer/AttachmentChips";
+import { ArrowsExchangeIcon, Layout2FilledIcon, LayoutGridFilledIcon, LayoutListIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { useAttachments } from "@/hooks/useAttachments";
 import { useIsDesktop } from "@/hooks/useIsDesktop";
@@ -40,15 +38,16 @@ export const LIBRARY_UPLOADS = "media-library";
 // load the next page this close to the end of the grid
 const NEAR_END_PX = 240;
 
-const TABS: { tab: MediaTab; label: string; title: string; Icon: typeof LayoutGrid }[] = [
-  { tab: "all", label: "All", title: "Show all assets", Icon: LayoutGrid },
+const TABS: { tab: MediaTab; label: string; title: string; Icon: typeof Sparkles | typeof Layout2FilledIcon }[] = [
+  { tab: "all", label: "All", title: "Show all assets", Icon: Layout2FilledIcon },
   { tab: "generated", label: "Generated", title: "AI-generated content from your chats and playground", Icon: Sparkles },
   { tab: "upload", label: "My Uploads", title: "Files you uploaded directly", Icon: CloudUpload },
 ];
 
 const pill = "flex h-8 items-center gap-[7px] rounded-full border px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring";
+// magica's controls sit on its "surface": white, and #1a1a1a in the dark, so they don't vanish into the #111 dialog
 const outlined =
-  "flex h-9 items-center gap-[7px] rounded-full border border-[#e5e5e5] bg-surface-main px-3.5 text-sm font-medium text-[#5e5e5e] outline-none focus-visible:ring-2 focus-visible:ring-ring dark:border-line-tertiary dark:text-text-secondary";
+  "flex h-9 items-center gap-[7px] rounded-full border border-[#e5e5e5] bg-surface-main px-3.5 text-sm font-medium text-[#5e5e5e] outline-none focus-visible:ring-2 focus-visible:ring-ring dark:border-line-tertiary dark:bg-surface-primary dark:text-text-secondary";
 const round = "flex size-7 shrink-0 items-center justify-center rounded-full text-[#5e5e5e] outline-none hover:bg-surface-secondary focus-visible:ring-2 focus-visible:ring-ring dark:text-text-secondary";
 
 // what a tile is called: the file's name, or for generated media the prompt (or the model)
@@ -351,7 +350,7 @@ function LibraryBody({ onPick }: { onPick: (asset: MediaAsset) => void }) {
 
       <div className="flex min-h-0 flex-1 gap-3 pr-4">
         <div className="flex min-w-0 flex-1 flex-col">
-          <div className="px-8 pt-4">
+          <div className="pl-8 pr-1 pt-4">
             <p className="text-sm font-semibold text-[#181818] dark:text-text-primary">Your Media</p>
             <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap gap-3">
@@ -366,21 +365,21 @@ function LibraryBody({ onPick }: { onPick: (asset: MediaAsset) => void }) {
                       pill,
                       tab === value
                         ? "border-[#e5e5e5] bg-[#ededed] font-semibold text-[#181818] dark:border-line-tertiary dark:bg-surface-tertiary dark:text-text-primary"
-                        : "border-transparent bg-surface-main font-medium text-[#5e5e5e] hover:bg-surface-primary dark:text-text-secondary",
+                        : "border-transparent bg-surface-main font-medium text-[#5e5e5e] hover:bg-surface-primary dark:bg-surface-primary dark:text-text-secondary dark:hover:bg-surface-secondary",
                     )}
                   >
                     <Icon className="size-3.5" aria-hidden="true" />
                     {label}
                   </button>
                 ))}
-                <button type="button" title={INERT} aria-disabled="true" className={cn(pill, "border-transparent bg-surface-main font-medium text-[#5e5e5e] dark:text-text-secondary")}>
+                <button type="button" title={INERT} aria-disabled="true" className={cn(pill, "border-transparent bg-surface-main font-medium text-[#5e5e5e] dark:bg-surface-primary dark:text-text-secondary")}>
                   <Heart className="size-3.5" aria-hidden="true" />
                   Favorites
                 </button>
               </div>
               <div className="flex items-center gap-2">
                 <button type="button" title={INERT} aria-disabled="true" aria-label="Sort media library by Newest First" className={outlined}>
-                  <ArrowDownUp className="size-3.5" aria-hidden="true" />
+                  <ArrowsExchangeIcon className="size-3.5" />
                   Sort
                   <ChevronDown className="size-3.5" aria-hidden="true" />
                 </button>
@@ -389,12 +388,13 @@ function LibraryBody({ onPick }: { onPick: (asset: MediaAsset) => void }) {
                   Filter
                   <ChevronDown className="size-3.5" aria-hidden="true" />
                 </button>
-                <div className="flex items-center gap-[5px]">
-                  <button type="button" aria-label="Grid view" title={INERT} aria-disabled="true" aria-pressed="true" className={cn(round, "size-8 bg-[#ededed] text-[#181818] dark:bg-surface-tertiary dark:text-text-primary")}>
-                    <LayoutGrid className="size-3.5" />
+                {/* magica's view switch: one bordered pill, the chosen view in a ringed circle */}
+                <div className="flex h-9 items-center gap-[5px] rounded-full border border-[#e5e5e5] bg-surface-main-2 p-0.5 dark:border-line-tertiary">
+                  <button type="button" aria-label="Grid view" title={INERT} aria-disabled="true" aria-pressed="true" className={cn(round, "size-8 bg-[#ededed] text-[#181818] shadow-[0_0_0_1px_#8a8a8a] dark:bg-surface-tertiary dark:text-text-primary dark:shadow-[0_0_0_1px_var(--line-primary)]")}>
+                    <LayoutGridFilledIcon className="size-3.5" />
                   </button>
                   <button type="button" aria-label="List view" title={INERT} aria-disabled="true" aria-pressed="false" className={cn(round, "size-8")}>
-                    <Rows3 className="size-3.5" />
+                    <LayoutListIcon className="size-3.5" />
                   </button>
                 </div>
               </div>
@@ -408,7 +408,7 @@ function LibraryBody({ onPick }: { onPick: (asset: MediaAsset) => void }) {
             </div>
           )}
 
-          <div ref={scrollRef} onScroll={onScroll} className="mt-9 min-h-0 flex-1 overflow-y-auto px-6 pb-6">
+          <div ref={scrollRef} onScroll={onScroll} className="mt-9 min-h-0 flex-1 overflow-y-auto pb-6 pl-6 pr-3">
             {body}
           </div>
         </div>
@@ -416,7 +416,7 @@ function LibraryBody({ onPick }: { onPick: (asset: MediaAsset) => void }) {
         {/* magica's folders: not in this build */}
         <nav aria-label="Folders" className="hidden w-[188px] shrink-0 flex-col gap-0.5 pt-[44px] lg:flex">
           <button type="button" title={INERT} aria-disabled="true" className="flex h-8 items-center gap-2 rounded-lg bg-surface-main px-[9px] text-sm font-medium text-[#181818] dark:text-text-primary">
-            <LayoutGrid className="size-3.5" aria-hidden="true" />
+            <Layout2FilledIcon className="size-3.5" />
             All
           </button>
           <button type="button" title={INERT} aria-disabled="true" className="flex h-8 items-center gap-2 rounded-lg px-[9px] text-sm font-medium text-[#5e5e5e] dark:text-text-secondary">
@@ -443,16 +443,17 @@ export function MediaLibraryDialog({ open, onOpenChange, onPick, returnFocusTo }
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="fixed inset-0 z-50" />
         <DialogPrimitive.Content
+          // as on magica, the search box doesn't take focus; the dialog does, so Tab and Escape start from it
           onOpenAutoFocus={(event) => {
             event.preventDefault();
-            (event.currentTarget as HTMLElement | null)?.querySelector<HTMLInputElement>('input[type="search"]')?.focus();
+            (event.currentTarget as HTMLElement | null)?.focus();
           }}
           onCloseAutoFocus={(event) => {
             event.preventDefault();
             returnFocusTo?.current?.focus({ preventScroll: true });
           }}
           style={{ left: `calc(${left}px + (100vw - ${left}px - 16px) / 2)`, width: `min(1060px, calc(100vw - ${left}px - 32px))` }}
-          className="fixed bottom-[50px] top-[50px] z-50 flex -translate-x-1/2 flex-col overflow-hidden rounded-2xl bg-surface-main shadow-[0_24px_32px_-8px_rgba(26,26,24,0.12),0_8px_12px_-6px_rgba(26,26,24,0.06)] outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 max-md:bottom-4 max-md:top-4"
+          className="fixed top-[6vh] z-50 flex h-[88vh] -translate-x-1/2 flex-col overflow-hidden rounded-2xl bg-surface-main shadow-[inset_0_0_0_1px_var(--library-ring),var(--shadow-floating)] outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 max-md:bottom-4 max-md:top-4 max-md:h-auto"
         >
           <LibraryBody onPick={onPick} />
         </DialogPrimitive.Content>

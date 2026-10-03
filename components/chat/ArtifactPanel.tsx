@@ -121,7 +121,6 @@ function Details({ artifact }: { artifact: Artifact }) {
             </p>
           </div>
         )}
-        {(asset.prompt || fileName) && <div className="h-px bg-line-tertiary" />}
         <div className="flex flex-col gap-4">
           {created && (
             <Row icon={<Calendar className="size-4" />} label="Created on">
@@ -138,12 +137,9 @@ function Details({ artifact }: { artifact: Artifact }) {
           )}
         </div>
         {asset.width && asset.height ? (
-          <>
-            <div className="h-px bg-line-tertiary" />
-            <Row icon={<Hash className="size-4" />} label="Dimensions">
-              {asset.width} X {asset.height}
-            </Row>
-          </>
+          <Row icon={<Hash className="size-4" />} label="Dimensions">
+            {asset.width} X {asset.height}
+          </Row>
         ) : null}
         {asset.type === "video" && asset.mimeType ? (
           <Row icon={<Box className="size-4" />} label="Format">
@@ -215,7 +211,7 @@ export function ArtifactPanel() {
             event.preventDefault();
             if (returnFocus.current?.isConnected) returnFocus.current.focus({ preventScroll: true });
           }}
-          className="fixed inset-x-0 bottom-0 z-50 flex h-[95dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-line-tertiary bg-surface-main shadow-xl outline-none md:inset-x-auto md:bottom-auto md:left-1/2 md:top-1/2 md:h-[700px] md:max-h-[calc(100dvh-32px)] md:w-[calc(100vw-32px)] md:max-w-[1248px] md:-translate-x-1/2 md:-translate-y-1/2 md:flex-row md:rounded-xl data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95"
+          className="fixed inset-x-0 bottom-0 z-50 flex h-[95dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-line-tertiary bg-surface-main shadow-[var(--shadow-floating)] outline-none md:inset-x-auto md:bottom-auto md:left-1/2 md:top-1/2 md:h-[700px] md:max-h-[calc(100dvh-32px)] md:w-[calc(100vw-32px)] md:max-w-[1248px] md:-translate-x-1/2 md:-translate-y-1/2 md:flex-row md:rounded-xl data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95"
         >
           {artifact && (
             <>

@@ -60,6 +60,29 @@ describe("the paperclip", () => {
     expect(click).toHaveBeenCalled();
   });
 
+  it.each([
+    // the paperclip low on the screen (a task, or the unscrolled home screen): more room above, so above it
+    [600, "top"],
+    // the composer scrolled up near the top: more room below
+    [120, "bottom"],
+  ])("opens on the side with more room (paperclip at %ipx: %s)", async (top, side) => {
+    const { user } = await openChat();
+    const clip = screen.getByRole("button", { name: "Attach files" });
+    vi.spyOn(clip, "getBoundingClientRect").mockReturnValue({ top, bottom: top + 32, left: 400, right: 432, width: 32, height: 32, x: 400, y: top, toJSON: () => ({}) });
+    vi.spyOn(window, "innerHeight", "get").mockReturnValue(800);
+    await user.click(clip);
+    const card = (await screen.findByText(/Add a file from your device/)).parentElement!;
+    expect(card).toHaveAttribute("data-side", side);
+  });
+
+  it("its Upload button is dark in both themes, as on magica", async () => {
+    const { user } = await openChat();
+    await user.click(screen.getByRole("button", { name: "Attach files" }));
+    const upload = await screen.findByRole("button", { name: "Upload" });
+    expect(upload).toHaveClass("bg-[#2b2b2b]", "text-white");
+    expect(upload.className).not.toMatch(/dark:bg-/);
+  });
+
   it("opens the media library from Select Asset", async () => {
     const { user } = await openChat();
     await user.click(screen.getByRole("button", { name: "Attach files" }));

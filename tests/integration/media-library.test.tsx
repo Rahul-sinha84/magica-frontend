@@ -191,6 +191,24 @@ describe("the media library", () => {
     expect(screen.getByText("5 files")).toBeInTheDocument();
   });
 
+  it("doesn't put focus in the search box when it opens (the dialog takes it, as on magica)", async () => {
+    openLibrary();
+    await screen.findByText("4 files");
+    const dialog = screen.getByRole("dialog", { name: "Media Library" });
+    await waitFor(() => expect(dialog).toHaveFocus());
+    expect(screen.getByRole("searchbox", { name: "Search assets" })).not.toHaveFocus();
+  });
+
+  it("holds the grid and list buttons in one switch, with the grid chosen", async () => {
+    openLibrary();
+    await screen.findByText("4 files");
+    const grid = screen.getByRole("button", { name: "Grid view" });
+    const list = screen.getByRole("button", { name: "List view" });
+    expect(grid.parentElement).toBe(list.parentElement);
+    expect(grid).toHaveAttribute("aria-pressed", "true");
+    expect(list).toHaveAttribute("aria-pressed", "false");
+  });
+
   it("closes from its close button", async () => {
     const { user, onOpenChange } = openLibrary();
     await user.click(await screen.findByRole("button", { name: "Close media library" }));
