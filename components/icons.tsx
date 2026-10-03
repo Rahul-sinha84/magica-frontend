@@ -76,3 +76,38 @@ export const Sparkles2Icon = tabler([
 
 // Tabler's "refresh": the retry action on a failed or stopped reply.
 export const RefreshIcon = tabler(["M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4", "M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4"]);
+
+// Tabler's filled icons: shapes painted in the text colour, no outline.
+function tablerFilled(paths: string[]) {
+  return function TablerFilledIcon(props: SVGProps<SVGSVGElement>) {
+    return (
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" {...props}>
+        {paths.map((d) => (
+          <path key={d} d={d} />
+        ))}
+      </svg>
+    );
+  };
+}
+
+// magica's Media Library: "All" (four tiles, two tall and two short), the grid and list views, and Sort
+export const Layout2FilledIcon = tablerFilled([
+  "M8 3a3 3 0 0 1 3 3v1a3 3 0 0 1 -3 3h-2a3 3 0 0 1 -3 -3v-1a3 3 0 0 1 3 -3z",
+  "M8 12a3 3 0 0 1 3 3v3a3 3 0 0 1 -3 3h-2a3 3 0 0 1 -3 -3v-3a3 3 0 0 1 3 -3z",
+  "M18 3a3 3 0 0 1 3 3v3a3 3 0 0 1 -3 3h-2a3 3 0 0 1 -3 -3v-3a3 3 0 0 1 3 -3z",
+  "M18 14a3 3 0 0 1 3 3v1a3 3 0 0 1 -3 3h-2a3 3 0 0 1 -3 -3v-1a3 3 0 0 1 3 -3z",
+]);
+
+export const LayoutGridFilledIcon = tablerFilled([
+  "M9 3a2 2 0 0 1 2 2v4a2 2 0 0 1 -2 2h-4a2 2 0 0 1 -2 -2v-4a2 2 0 0 1 2 -2z",
+  "M19 3a2 2 0 0 1 2 2v4a2 2 0 0 1 -2 2h-4a2 2 0 0 1 -2 -2v-4a2 2 0 0 1 2 -2z",
+  "M9 13a2 2 0 0 1 2 2v4a2 2 0 0 1 -2 2h-4a2 2 0 0 1 -2 -2v-4a2 2 0 0 1 2 -2z",
+  "M19 13a2 2 0 0 1 2 2v4a2 2 0 0 1 -2 2h-4a2 2 0 0 1 -2 -2v-4a2 2 0 0 1 2 -2z",
+]);
+
+export const LayoutListIcon = tabler([
+  "M4 6a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v2a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2l0 -2",
+  "M4 16a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v2a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2l0 -2",
+]);
+
+export const ArrowsExchangeIcon = tabler(["M7 10h14l-4 -4", "M17 14h-14l4 4"], 1.8);

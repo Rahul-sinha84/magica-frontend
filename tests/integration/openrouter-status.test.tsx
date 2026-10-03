@@ -11,9 +11,11 @@ import { renderApp } from "../utils/render";
 const status = () => screen.getByLabelText(/^OpenRouter Free/);
 const dotOf = (el: HTMLElement) => el.querySelector("span[aria-hidden]")!;
 
-function setHealth(health: ModelHealth, lastRoutedModel: string | null = "meta-llama/llama-3.3-70b-instruct:free") {
-  getMockDb().models.status = { health, lastRoutedModel, checkedAt: new Date().toISOString() };
+function setHealth(health: ModelHealth, lastRoutedModel: string | null = "meta-llama/llama-3.3-70b-instruct:free", reason: string | null = null) {
+  getMockDb().models.status = { health, lastRoutedModel, reason, checkedAt: new Date().toISOString() };
 }
+
+const DAILY_LIMIT = "The free model's daily limit is reached. It resets at 00:00 UTC.";
 
 function renderComposer() {
   const onSubmit = vi.fn();
@@ -54,6 +56,32 @@ describe("the OpenRouter Free status", () => {
     const { user } = renderComposer();
     await waitFor(() => expect(status()).toHaveAttribute("data-health", "available"));
     expect(await tooltipText(user)).not.toContain("Last answered by");
+  });
+
+  it("adds the server's reason as its own line when there is one", async () => {
+    setHealth("unavailable", "meta-llama/llama-3.3-70b-instruct:free", DAILY_LIMIT);
+    const { user } = renderComposer();
+    await waitFor(() => expect(status()).toHaveAttribute("data-health", "unavailable"));
+    await user.hover(status());
+    const tooltip = await screen.findByRole("tooltip");
+    const lines = [...tooltip.querySelectorAll("p")].map((p) => p.textContent);
+    expect(lines).toContain(DAILY_LIMIT);
+    // styled like the other lines: a paragraph of its own in the same stack
+    expect(lines.at(-1)).toBe(DAILY_LIMIT);
+  });
+
+  it("has no reason line when the server gives none", async () => {
+    setHealth("unavailable");
+    const { user } = renderComposer();
+    await waitFor(() => expect(status()).toHaveAttribute("data-health", "unavailable"));
+    await user.hover(status());
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip).not.toHaveTextContent("daily limit");
+    expect([...tooltip.querySelectorAll("p")].map((p) => p.textContent)).toEqual([
+      "Free model",
+      "Last answered by meta-llama/llama-3.3-70b-instruct:free",
+      "Free models aren't answering right now. You can still send; it may fail.",
+    ]);
   });
 
   it("opens on keyboard focus too", async () => {

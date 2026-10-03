@@ -16,7 +16,8 @@ function load(): MockDb | null {
 }
 
 const saved = load();
-if (saved) setMockDb(saved);
+// data saved before the media library existed has none
+if (saved) setMockDb({ ...saved, media: saved.media ?? [], uploads: saved.uploads ?? {}, waitpoints: saved.waitpoints ?? {}, plans: saved.plans ?? {}, apiKeys: saved.apiKeys ?? [] });
 else {
   addLongChat();
   addRetryChat();

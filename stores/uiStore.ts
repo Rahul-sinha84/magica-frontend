@@ -29,3 +29,20 @@ export const useMobileSidebar = create<MobileSidebar>()((set) => ({
   open: false,
   setOpen: (open) => set({ open }),
 }));
+
+// The chat search palette (⌘K). Not remembered either.
+interface ChatSearchPalette {
+  open: boolean;
+  setOpen: (open: boolean) => void;
+}
+
+export const useChatSearchPalette = create<ChatSearchPalette>()((set) => ({
+  open: false,
+  setOpen: (open) => set({ open }),
+}));
+
+// The API Keys dialog (the sidebar's "API / MCP"). Not remembered either.
+export const useApiKeysDialog = create<{ open: boolean; setOpen: (open: boolean) => void }>()((set) => ({
+  open: false,
+  setOpen: (open) => set({ open }),
+}));

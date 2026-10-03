@@ -1,20 +1,38 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, type ReactElement } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Search } from "lucide-react";
 import { LayoutSidebarIcon } from "@/components/icons";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useIsDesktop } from "@/hooks/useIsDesktop";
 import { cn } from "@/lib/utils";
-import { useMobileSidebar, useUiStore } from "@/stores/uiStore";
+import { useChatSearchPalette, useMobileSidebar, useUiStore } from "@/stores/uiStore";
 import { SidebarFooter } from "./SidebarFooter";
 import { SidebarNav } from "./SidebarNav";
 import { SidebarTasks } from "./SidebarTasks";
 
 const round =
   "flex size-7 items-center justify-center rounded-full text-icon-primary outline-none hover:bg-surface-secondary focus-visible:ring-2 focus-visible:ring-ring";
+
+// magica's tooltip on the sidebar toggle: "Toggle sidebar" and its shortcut
+function ToggleTip({ children }: { children: ReactElement }) {
+  const key = "rounded-[5px] bg-background/15 px-1 font-sans text-[10px] font-medium leading-4 text-background/80";
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent side="bottom" sideOffset={6} hideArrow className="gap-1.5 rounded-[6px] py-1 pl-2 pr-1 text-[10.5px] font-semibold">
+        Toggle sidebar
+        <span className="flex gap-0.5">
+          <kbd className={key}>⌘</kbd>
+          <kbd className={key}>B</kbd>
+        </span>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 function Wordmark({ className }: { className?: string }) {
   return (
@@ -39,6 +57,12 @@ export function Sidebar() {
   const setMobileOpen = useMobileSidebar((s) => s.setOpen);
   // the icon rail only exists on desktop; the mobile drawer is always the full sidebar
   const rail = collapsed && isDesktop;
+  const setSearchOpen = useChatSearchPalette((s) => s.setOpen);
+  // the search palette, in place of the drawer on a phone
+  function openSearch() {
+    setMobileOpen(false);
+    setSearchOpen(true);
+  }
 
   // close the drawer when you navigate
   useEffect(() => setMobileOpen(false), [pathname, setMobileOpen]);
@@ -46,6 +70,12 @@ export function Sidebar() {
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") setMobileOpen(false);
+      // ⌘B / Ctrl+B shows or hides the sidebar (on a phone, the drawer), as on magica.com
+      if ((event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "b") {
+        event.preventDefault();
+        if (isDesktop) toggle();
+        else setMobileOpen(!useMobileSidebar.getState().open);
+      }
       // ⌘⇧O / Ctrl⇧O starts a new task, as on magica.com
       if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === "o") {
         event.preventDefault();
@@ -54,7 +84,7 @@ export function Sidebar() {
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [router, setMobileOpen]);
+  }, [router, setMobileOpen, isDesktop, toggle]);
 
   return (
     <>
@@ -75,17 +105,20 @@ export function Sidebar() {
         <div className="flex w-60 shrink-0 flex-col md:w-full">
           {rail ? (
             <div className="flex flex-col items-center pt-2">
-              <button
-                type="button"
-                aria-label="Open sidebar"
-                onClick={toggle}
-                className="flex size-[34px] items-center justify-center rounded-lg outline-none hover:bg-surface-secondary focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <span className="block size-5 overflow-hidden">
-                  <Wordmark />
-                </span>
-              </button>
-              <button type="button" aria-label="Search" title="Not available in this build" aria-disabled="true" className={cn(round, "mb-1 mt-4")}>
+              <ToggleTip>
+                <button
+                  type="button"
+                  aria-label="Open sidebar"
+                  aria-keyshortcuts="Meta+B Control+B"
+                  onClick={toggle}
+                  className="flex size-[34px] items-center justify-center rounded-lg outline-none hover:bg-surface-secondary focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <span className="block size-5 overflow-hidden">
+                    <Wordmark />
+                  </span>
+                </button>
+              </ToggleTip>
+              <button type="button" aria-label="Search" aria-keyshortcuts="Meta+K Control+K" onClick={openSearch} className={cn(round, "mb-1 mt-4")}>
                 <Search className="size-4" />
               </button>
             </div>
@@ -99,24 +132,29 @@ export function Sidebar() {
                 <Wordmark />
               </Link>
               <div className="flex items-center gap-0.5">
-                <button type="button" aria-label="Search" title="Not available in this build" aria-disabled="true" className={round}>
+                <button type="button" aria-label="Search" aria-keyshortcuts="Meta+K Control+K" onClick={openSearch} className={round}>
                   <Search className="size-4" />
                 </button>
-                <button
-                  type="button"
-                  aria-label="Close sidebar"
-                  onClick={isDesktop ? toggle : () => setMobileOpen(false)}
-                  className={round}
-                >
-                  <LayoutSidebarIcon className="size-4" />
-                </button>
+                <ToggleTip>
+                  <button
+                    type="button"
+                    aria-label="Close sidebar"
+                    aria-keyshortcuts="Meta+B Control+B"
+                    onClick={isDesktop ? toggle : () => setMobileOpen(false)}
+                    className={round}
+                  >
+                    <LayoutSidebarIcon className="size-4" />
+                  </button>
+                </ToggleTip>
               </div>
             </div>
           )}
 
-          {/* nav and tasks scroll together on short screens; the header and footer stay put */}
+          {/* as on magica: "New task" stays put, and the rest of the nav scrolls away with the tasks under it, so
+              more tasks show; the header and footer stay put too */}
+          <SidebarNav rail={rail} part="top" />
           <div className="min-h-0 flex-1 overflow-y-auto">
-            <SidebarNav rail={rail} />
+            <SidebarNav rail={rail} part="rest" />
             {!rail && (
               <div className="mt-2 px-2">
                 <SidebarTasks />

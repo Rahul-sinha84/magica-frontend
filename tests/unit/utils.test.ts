@@ -39,6 +39,16 @@ describe("formatCredits", () => {
     expect(formatCredits(70_000)).toBe("0.07M");
   });
 
+  it("drops trailing zeros, as magica does", () => {
+    expect(formatCredits(25_900_000)).toBe("25.9M");
+    expect(formatCredits(27_620_000)).toBe("27.62M");
+    expect(formatCredits(20_300_000)).toBe("20.3M");
+    expect(formatCredits(1_000_000)).toBe("1M");
+    expect(formatCredits(100_000)).toBe("0.1M");
+    // a value that rounds to a whole million doesn't keep its point
+    expect(formatCredits(30_000_400)).toBe("30M");
+  });
+
   it("shows small amounts as whole numbers", () => {
     expect(formatCredits(9_500)).toBe("9,500");
     expect(formatCredits(0)).toBe("0");

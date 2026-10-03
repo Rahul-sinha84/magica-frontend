@@ -4,6 +4,7 @@ import Image from "next/image";
 import { format } from "date-fns";
 import { Composer } from "@/components/composer/Composer";
 import { useClock } from "@/hooks/useClock";
+import { useComposerAttachments } from "@/hooks/useComposerAttachments";
 import { useSendMessage } from "@/hooks/useSendMessage";
 import { NEW_CHAT, useChatStore } from "@/stores/chatStore";
 import { ChatHeader } from "./ChatHeader";
@@ -12,6 +13,7 @@ export function HomeScreen() {
   const text = useChatStore((state) => state.drafts[NEW_CHAT] ?? "");
   const setDraft = useChatStore((state) => state.setDraft);
   const { send, isSending } = useSendMessage(null);
+  const attachments = useComposerAttachments(NEW_CHAT, null);
   const now = useClock();
 
   return (
@@ -40,6 +42,7 @@ export function HomeScreen() {
             onSubmit={() => send(text)}
             sending={isSending}
             autoFocus
+            attachments={attachments}
           />
         </div>
       </div>

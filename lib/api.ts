@@ -1,16 +1,25 @@
 import type { z } from "zod";
 import {
   ActiveRunResponseSchema,
+  ApiKeyListResponseSchema,
+  ApiKeyResponseSchema,
   ChatListResponseSchema,
   ChatResponseSchema,
+  ChatSearchResponseSchema,
+  CreateApiKeyResponseSchema,
   CreateChatResponseSchema,
+  CreateUploadsResponseSchema,
   CreditsResponseSchema,
   ErrorCodeSchema,
+  MediaListResponseSchema,
   MessageListResponseSchema,
   ModelsResponseSchema,
+  RespondWaitpointResponseSchema,
   RetryRunResponseSchema,
   SendMessageResponseSchema,
+  UploadResultSchema,
 } from "@/contracts";
+import type { CreateApiKeyBody, MediaListQuery, RespondWaitpointBody, RunMode, SendMessageBody, UpdateApiKeyBody, UpdateChatBody, UploadFile } from "@/contracts";
 import { BACKEND_URL } from "./config";
 import { ApiError } from "./queryClient";
 
@@ -26,7 +35,18 @@ interface SendMessageInput {
   content: string;
   // chosen by the caller so a retry or a lost response can never create a second message
   clientMessageId: string;
-  attachments?: string[];
+  // files from the user's media library, in the order they were attached
+  attachments?: SendMessageBody["attachments"];
+  // "plan": the agent proposes a plan and waits for the user's approval before spending anything
+  mode?: RunMode;
+}
+
+// the query string for a list request, leaving out what isn't set
+function search(params: Record<string, string | number | null | undefined>) {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) if (value !== undefined && value !== null && value !== "") query.set(key, String(value));
+  const text = query.toString();
+  return text ? `?${text}` : "";
 }
 
 const enc = encodeURIComponent;
@@ -137,6 +157,12 @@ export function createApi(getToken: GetToken, { timeoutMs = 30_000 } = {}) {
       create: (title?: string) =>
         json("/api/chats", CreateChatResponseSchema, { method: "POST", body: title ? { title } : {} }),
       delete: (chatId: string) => empty(`/api/chats/${enc(chatId)}`, { method: "DELETE" }),
+      // rename and/or pin; the server answers with the chat as it now is
+      update: (chatId: string, body: UpdateChatBody) =>
+        json(`/api/chats/${enc(chatId)}`, ChatResponseSchema, { method: "PATCH", body }),
+      // titles and message text, at least SEARCH_QUERY_MIN characters; pass back the cursor for the next page
+      search: (q: string, cursor?: string | null, signal?: AbortSignal) =>
+        json(`/api/chats/search?q=${enc(q)}${cursor ? `&cursor=${enc(cursor)}` : ""}`, ChatSearchResponseSchema, { signal }),
     },
     messages: {
       list: (chatId: string, cursor?: string | null, signal?: AbortSignal) =>
@@ -145,11 +171,23 @@ export function createApi(getToken: GetToken, { timeoutMs = 30_000 } = {}) {
           MessageListResponseSchema,
           { signal },
         ),
-      send: (chatId: string, { content, clientMessageId, attachments = [] }: SendMessageInput) =>
+      send: (chatId: string, { content, clientMessageId, attachments = [], mode = "default" }: SendMessageInput) =>
         json(`/api/chats/${enc(chatId)}/messages`, SendMessageResponseSchema, {
           method: "POST",
-          body: { content, clientMessageId, attachments },
+          body: { content, clientMessageId, attachments, mode },
         }),
+    },
+    uploads: {
+      // one signed upload per file, in the order given
+      create: (files: UploadFile[]) => json("/api/uploads", CreateUploadsResponseSchema, { method: "POST", body: { files } }),
+      // the browser's word that the file reached the upload service; the server checks and says where it stands
+      complete: (uploadId: string, assemblyId: string) =>
+        json(`/api/uploads/${enc(uploadId)}/complete`, UploadResultSchema, { method: "POST", body: { assemblyId } }),
+    },
+    media: {
+      // the media library, newest first, a page at a time
+      list: ({ source, q, cursor, limit }: Omit<Partial<MediaListQuery>, "cursor"> & { cursor?: string | null }, signal?: AbortSignal) =>
+        json(`/api/media${search({ source, q, cursor, limit })}`, MediaListResponseSchema, { signal }),
     },
     runs: {
       getActive: (chatId: string, signal?: AbortSignal) =>
@@ -157,6 +195,21 @@ export function createApi(getToken: GetToken, { timeoutMs = 30_000 } = {}) {
       cancel: (runId: string) => empty(`/api/runs/${enc(runId)}/cancel`, { method: "POST" }),
       // answers the same question again as a new turn; 201 for a new retry, 200 if it had already started
       retry: (runId: string) => json(`/api/runs/${enc(runId)}/retry`, RetryRunResponseSchema, { method: "POST" }),
+    },
+    waitpoints: {
+      // the user's answer to what a run is waiting on; an already-closed one comes back as it stands
+      respond: (waitpointId: string, body: RespondWaitpointBody) =>
+        json(`/api/waitpoints/${enc(waitpointId)}/respond`, RespondWaitpointResponseSchema, { method: "POST", body }),
+    },
+    apiKeys: {
+      // the user's keys (revoked ones aren't listed), newest first, with the "n/10" counter
+      list: (signal?: AbortSignal) => json("/api/api-keys", ApiKeyListResponseSchema, { signal }),
+      // the answer holds the key itself (`secret`): shown once, and never kept anywhere
+      create: (body: CreateApiKeyBody) => json("/api/api-keys", CreateApiKeyResponseSchema, { method: "POST", body }),
+      // rename it, or change its limits
+      update: (apiKeyId: string, body: UpdateApiKeyBody) => json(`/api/api-keys/${enc(apiKeyId)}`, ApiKeyResponseSchema, { method: "PATCH", body }),
+      // for good; revoking it again is harmless
+      revoke: (apiKeyId: string) => empty(`/api/api-keys/${enc(apiKeyId)}`, { method: "DELETE" }),
     },
     credits: {
       get: (signal?: AbortSignal) => json("/api/credits", CreditsResponseSchema, { signal }),

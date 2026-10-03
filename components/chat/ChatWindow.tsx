@@ -7,6 +7,7 @@ import { Composer } from "@/components/composer/Composer";
 import { useChat } from "@/hooks/useChat";
 import { useMessages } from "@/hooks/useMessages";
 import { useAgentStream } from "@/hooks/useAgentStream";
+import { useComposerAttachments } from "@/hooks/useComposerAttachments";
 import { useRunChecked } from "@/hooks/useRunWatcher";
 import { useSendMessage } from "@/hooks/useSendMessage";
 import { useStopRun } from "@/hooks/useStopRun";
@@ -15,6 +16,7 @@ import { chatTitle } from "@/lib/utils";
 import { ApiError } from "@/lib/queryClient";
 import { ChatHeader } from "./ChatHeader";
 import { MessageList } from "./MessageList";
+import { WaitpointCard } from "./WaitpointCard";
 
 const NO_PENDING: never[] = [];
 
@@ -27,6 +29,7 @@ export function ChatWindow({ chatId }: { chatId: string }) {
   const optimistic = useChatStore((state) => state.optimistic[chatId] ?? NO_PENDING);
   const running = useChatStore((state) => !!state.runs[chatId]);
   const { send, isSending } = useSendMessage(chatId);
+  const attachments = useComposerAttachments(chatId, chatId);
   const stop = useStopRun(chatId);
   const stream = useAgentStream(chatId);
   // Until the server has said whether a run is going (after a reload, a reply may still be on its way), nothing
@@ -79,7 +82,13 @@ export function ChatWindow({ chatId }: { chatId: string }) {
           onLoadOlder={() => void fetchNextPage()}
         />
       )}
-      <div className="flex justify-center px-2 pb-1 pt-2 sm:px-4 md:px-6 lg:px-8">
+      <div className="flex flex-col items-center gap-2 px-2 pb-1 pt-2 sm:px-4 md:px-6 lg:px-8">
+        {/* what the run waits for the user to answer: a plan, or a spend (a new one is a new card) */}
+        {stream?.waitpoint && (
+          <div className="w-full max-w-[868px]">
+            <WaitpointCard key={stream.waitpoint.id} chatId={chatId} waitpoint={stream.waitpoint} />
+          </div>
+        )}
         <Composer
           value={text}
           onChange={(value) => setDraft(chatId, value)}
@@ -91,6 +100,7 @@ export function ChatWindow({ chatId }: { chatId: string }) {
           sending={isSending}
           stopping={stream?.phase === "stopping"}
           blocked={!checked}
+          attachments={attachments}
         />
       </div>
     </div>

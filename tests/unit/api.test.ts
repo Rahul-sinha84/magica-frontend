@@ -498,9 +498,9 @@ describe("what the backend refuses to accept", () => {
     expect(message.content).toBe(code);
   });
 
-  it("rejects attachments that aren't http(s) links", async () => {
-    server.use(http.post(at("/api/chats/:chatId/messages"), () => HttpResponse.json({ error: "bad", code: "VALIDATION_FAILED" }, { status: 400 })));
-    expect(await failure(api.messages.send("chat-greeting", { content: "hi", clientMessageId: uuid(), attachments: ["javascript:alert(1)"] }))).toMatchObject({ status: 400 });
+  it("sends attachments as library files, and passes on the server's refusal of one that isn't there", async () => {
+    const error = await failure(api.messages.send("chat-greeting", { content: "hi", clientMessageId: uuid(), attachments: [{ mediaAssetId: "not-mine" }] }));
+    expect(error).toMatchObject({ status: 400, message: "attachments.0: That file isn't in your library." });
   });
 });
 
@@ -546,5 +546,39 @@ describe("retrying a reply (mock backend, matching the backend's rules)", () => 
     const now = new Date().toISOString();
     getMockDb().runs["chat-failed"] = { id: "run-busy", chatId: "chat-failed", triggerRunId: null, status: "RUNNING", startedAt: now, completedAt: null };
     await expect(api.runs.retry("run-failed")).rejects.toMatchObject({ status: 409, code: "RUN_ACTIVE" });
+  });
+});
+
+describe("chat search and updates", () => {
+  it("searches with the text and the next page's cursor, escaped, and checks the answer", async () => {
+    let url: URL | null = null;
+    server.use(
+      http.get(at("/api/chats/search"), ({ request }) => {
+        url = new URL(request.url);
+        return HttpResponse.json({ chats: [], cursor: null });
+      }),
+    );
+    await api.chats.search("50% & more", "a/b");
+    expect(url!.searchParams.get("q")).toBe("50% & more");
+    expect(url!.searchParams.get("cursor")).toBe("a/b");
+  });
+
+  it("finds chats by title and by message text, and refuses fewer than 3 characters with the server's words", async () => {
+    expect((await api.chats.search("apple")).chats.map((chat) => chat.id)).toEqual(["chat-apple"]);
+    expect((await api.chats.search("help you")).chats.map((chat) => chat.id)).toEqual(["chat-greeting"]);
+    const error = await failure(api.chats.search("ap"));
+    expect(error.status).toBe(400);
+    expect(error.message).toBe("q: Type at least 3 characters to search.");
+  });
+
+  it("renames and pins with a PATCH, and returns the chat as the server has it", async () => {
+    let body: unknown = null;
+    server.events.on("request:start", async ({ request }) => {
+      if (request.method === "PATCH") body = await request.clone().json();
+    });
+    const { chat } = await api.chats.update("chat-greeting", { title: "Hello", isPinned: true });
+    expect(body).toEqual({ title: "Hello", isPinned: true });
+    expect(chat).toMatchObject({ id: "chat-greeting", title: "Hello", isPinned: true });
+    server.events.removeAllListeners();
   });
 });

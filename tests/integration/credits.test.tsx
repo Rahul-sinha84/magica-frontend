@@ -25,7 +25,8 @@ describe("credits pill", () => {
   it("shows what can still be spent, not the raw balance", async () => {
     server.use(credits({ balance: 10_000_000, held: 3_000_000 }));
     renderApp(<CreditsBadge />);
-    expect(await screen.findByRole("button", { name: "Credits available: 7.00M" })).toHaveTextContent("7.00M");
+    // as magica writes it, with no trailing zeros
+    expect(await screen.findByRole("button", { name: "Credits available: 7M" })).toHaveTextContent("7M");
   });
 
   it("asks you to upgrade when everything left is reserved by a run in flight", async () => {

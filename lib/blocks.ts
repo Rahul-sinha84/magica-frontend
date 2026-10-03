@@ -8,6 +8,11 @@ export type Segment =
   | { kind: "block"; block: Exclude<ContentBlock, ToolCallBlock | ToolResultBlock> }
   | { kind: "steps"; calls: ToolCallBlock[]; results: Map<string, ToolResultBlock> };
 
+// The plan tool's call is the plan card itself (above the composer while it waits, a waitpoint card after), so
+// it never shows as a step.
+const HIDDEN_TOOLS = new Set(["propose_plan"]);
+export const isHiddenStep = (block: ContentBlock) => (block.type === "tool_call" || block.type === "tool_result") && HIDDEN_TOOLS.has(block.toolName);
+
 // Consecutive tool calls become one "steps" group. A tool_result is never shown on its own: it is
 // paired with its call by id, wherever it sits in the message.
 export function groupBlocks(blocks: readonly ContentBlock[]): Segment[] {
@@ -22,6 +27,7 @@ export function groupBlocks(blocks: readonly ContentBlock[]): Segment[] {
   let thinking: { kind: "block"; block: ThinkingBlock } | null = null;
   for (const block of blocks) {
     if (block.type === "tool_result") continue;
+    if (isHiddenStep(block)) continue;
     if (block.type === "tool_call") {
       if (steps) steps.calls.push(block);
       else segments.push((steps = { kind: "steps", calls: [block], results }));
@@ -74,8 +80,11 @@ function show(value: unknown) {
       text = String(value);
     }
   }
-  return text.length > MAX_VALUE_LENGTH ? `${text.slice(0, MAX_VALUE_LENGTH)}…` : text;
+  return clip(text);
 }
+
+// A value in a step's key/value table, cut off when it runs long.
+export const clip = (text: string) => (text.length > MAX_VALUE_LENGTH ? `${text.slice(0, MAX_VALUE_LENGTH)}…` : text);
 
 // A tool's name as the UI shows it: the backend's label for its own tools, a readable version of anything else.
 export function toolTitle(name: string) {

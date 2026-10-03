@@ -46,4 +46,18 @@ describe("foldChunks", () => {
     const [call] = foldChunks([start("a")]);
     expect(call).toMatchObject({ type: "tool_call", status: "running" });
   });
+
+  it("folds a waitpoint into one card: pending, then how it was answered, the same on a replay", () => {
+    const plan = { title: "Fox", overview: "Make it", steps: [{ title: "Generate", estimatedCredits: 70_000 }], totalCredits: 70_000 };
+    const chunks: AgentStreamChunk[] = [
+      { type: "waitpoint-start", waitpointId: "wp-1", waitpointType: "plan", payload: plan, expiresAt: "2026-10-02T12:30:00.000Z" },
+      { type: "waitpoint-start", waitpointId: "wp-1", waitpointType: "plan", payload: plan, expiresAt: "2026-10-02T12:30:00.000Z" },
+    ];
+    const waiting = foldChunks(chunks);
+    expect(waiting).toEqual([{ type: "waitpoint", waitpointId: "wp-1", waitpointType: "plan", payload: plan, expiresAt: "2026-10-02T12:30:00.000Z", status: "pending" }]);
+
+    const answered = [...chunks, { type: "waitpoint-end", waitpointId: "wp-1", status: "changes_requested", feedback: "a red fox", waitedMs: 76_000 } as AgentStreamChunk];
+    expect(foldChunks(answered)).toEqual([{ ...waiting[0], status: "changes_requested", feedback: "a red fox", waitedMs: 76_000 }]);
+    expect(foldChunks([...answered])).toEqual(foldChunks(answered));
+  });
 });

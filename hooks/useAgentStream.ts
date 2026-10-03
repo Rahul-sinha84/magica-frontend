@@ -8,6 +8,7 @@ import { REALTIME_RETRY_MS, TOKEN_REFRESH_LEAD_MS } from "@/lib/timing";
 import { useChatStore } from "@/stores/chatStore";
 import type { AgentStreamMetadata, ContentBlock } from "@/types";
 import { toolTitle } from "@/lib/blocks";
+import { waitingOn, type PendingWaitpoint } from "@/lib/waitpoints";
 import { useRunWatcher } from "./useRunWatcher";
 
 // Trigger.dev statuses after which the run won't change again. Hearing one only makes us ask our server,
@@ -35,8 +36,9 @@ const METADATA_FINISHED = new Set<AgentStreamMetadata["status"]>(["complete", "f
 // Trigger.dev statuses for a run that is waiting to be picked up
 const TRIGGER_QUEUED = new Set(["QUEUED", "DELAYED", "PENDING_VERSION"]);
 
-// "waiting": queued, nothing written yet. Looks like "thinking" at first, with a note if it lasts.
-export type StreamPhase = "waiting" | "thinking" | "writing" | "stopping";
+// "queued": nothing written yet, the run waits for a worker. Looks like "thinking" at first, with a note if it
+// lasts. "waiting": the run waits for the user to answer a plan or a spend.
+export type StreamPhase = "queued" | "thinking" | "writing" | "waiting" | "stopping";
 
 export interface AgentStream {
   chatId: string;
@@ -50,6 +52,8 @@ export interface AgentStream {
   reconnecting: boolean;
   // the tool working right now, by its display name ("GPT Image 2"), from the run's metadata; null between tools
   runningTool: string | null;
+  // what the run waits for the user to answer (a plan, or a spend); null when it isn't waiting
+  waitpoint: PendingWaitpoint | null;
 }
 
 // How far along a reply is: its pieces, and the text inside them.
@@ -70,6 +74,7 @@ function partialOf(partial: { partialBlocks: ContentBlock[]; partialText: string
 export function useAgentStream(chatId: string): AgentStream | null {
   const run = useChatStore((s) => s.runs[chatId]);
   const stopping = useChatStore((s) => !!s.stopping[chatId]);
+  const closedWaitpoints = useChatStore((s) => s.closedWaitpoints);
   // bumped to try the live stream again after it failed
   const [attempt, setAttempt] = useState(0);
 
@@ -159,23 +164,36 @@ export function useAgentStream(chatId: string): AgentStream | null {
     if (thinkingMs === undefined || block?.type !== "thinking" || block.durationMs !== undefined) return chosen;
     return chosen.map((b, i) => (i === first ? { ...block, durationMs: thinkingMs } : b));
   }, [live, folded, saved, thinkingMs]);
-
+  const waitpoint = useMemo(() => waitingOn(blocks, partial, closedWaitpoints), [blocks, partial, closedWaitpoints]);
+  // a waitpoint appeared that the server's last answer didn't have: ask now, so its word on it isn't 10s away
+  const waitpointId = waitpoint?.id;
+  const serverHas = !!waitpointId && partial?.pendingWaitpoint?.id === waitpointId;
+  useEffect(() => {
+    if (waitpointId && !serverHas) check();
+  }, [waitpointId, serverHas, check]);
 
   if (!run) return null;
   const queued = run.status === "PENDING" || (!!triggerStatus && TRIGGER_QUEUED.has(triggerStatus));
+  // the metadata can say "waiting" a moment after this tab's own answer closed the waitpoint
+  const metadataWaiting = metadata?.status === "waiting" && !!metadata.waitpointId && !closedWaitpoints[metadata.waitpointId] && !closedIn(blocks, metadata.waitpointId);
   const phase: StreamPhase =
     stopping || metadata?.status === "stopping"
       ? "stopping"
       : queued && blocks.length === 0
-        ? "waiting"
-        : blocks.length === 0 || metadata?.status === "thinking"
-          ? "thinking"
-          : "writing";
+        ? "queued"
+        : waitpoint || metadataWaiting
+          ? "waiting"
+          : blocks.length === 0 || metadata?.status === "thinking"
+            ? "thinking"
+            : "writing";
   // The metadata can lag the stream by a few seconds, so the line also goes as soon as the stream shows
   // that tool finished (and no other run of it is still going).
   const tool = metadata?.currentTool;
   const ofTool = tool ? blocks.filter((block) => block.type === "tool_call" && block.toolName === tool.name) : [];
   const finished = ofTool.length > 0 && ofTool.every((block) => block.type === "tool_call" && (block.status === "completed" || block.status === "failed"));
   const runningTool = tool && tool.status === "running" && !finished ? toolTitle(tool.name) : null;
-  return { chatId, blocks, phase, live, reconnecting, runningTool };
+  return { chatId, blocks, phase, live, reconnecting, runningTool, waitpoint };
 }
+
+// the reply already shows this waitpoint answered (or expired, or stopped)
+const closedIn = (blocks: readonly ContentBlock[], id: string) => blocks.some((block) => block.type === "waitpoint" && block.waitpointId === id && block.status !== "pending");

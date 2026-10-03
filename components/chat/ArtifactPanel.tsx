@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useParams } from "next/navigation";
 import { Dialog as DialogPrimitive } from "radix-ui";
-import { Box, Calendar, Check, Copy, Download, FileText, Hash, Heart, ImagePlus, Link2, Sparkles, Trash2, Wand2, X } from "lucide-react";
+import { Box, Calendar, Check, CloudUpload, Copy, Download, File as FileIcon, FileText, Hash, Heart, ImagePlus, Link2, Sparkles, Trash2, Wand2, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn, formatPreviewDate, safeAssetUrl } from "@/lib/utils";
 import { useChatStore, type Artifact } from "@/stores/chatStore";
@@ -70,8 +70,13 @@ function Media({ artifact }: { artifact: Artifact }) {
   );
 }
 
+// magica shows a file's name without its extension
+const baseName = (name: string) => name.replace(/\.[^./\\]+$/, "") || name;
+
 function Details({ artifact }: { artifact: Artifact }) {
   const { asset, createdAt } = artifact;
+  const uploaded = artifact.source === "upload";
+  const fileName = artifact.name ? baseName(artifact.name) : null;
   const { copied, copy } = useCopy();
   const link = safeAssetUrl(asset.url);
   const created = createdAt ? formatPreviewDate(createdAt) : "";
@@ -103,15 +108,27 @@ function Details({ artifact }: { artifact: Artifact }) {
             </p>
           </div>
         )}
-        {asset.prompt && <div className="h-px bg-line-tertiary" />}
+        {fileName && (
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-1 text-sm leading-5">
+              <span className="flex size-6 items-center justify-center rounded-[4px] bg-surface-secondary text-text-secondary" aria-hidden="true">
+                <FileIcon className="size-4" />
+              </span>
+              <span className="text-text-secondary">File Name</span>
+            </div>
+            <p title={artifact.name ?? undefined} className="truncate rounded-[10px] border-[0.5px] border-line-secondary bg-surface-secondary px-2 py-2 text-sm leading-5 text-text-primary">
+              {fileName}
+            </p>
+          </div>
+        )}
         <div className="flex flex-col gap-4">
           {created && (
             <Row icon={<Calendar className="size-4" />} label="Created on">
               {created}
             </Row>
           )}
-          <Row icon={<Sparkles className="size-4" />} label="Source">
-            Generated in chat
+          <Row icon={uploaded ? <CloudUpload className="size-4" /> : <Sparkles className="size-4" />} label="Source">
+            {uploaded ? "Uploaded" : "Generated in chat"}
           </Row>
           {asset.model && (
             <Row icon={<Wand2 className="size-4" />} label="Model">
@@ -120,12 +137,9 @@ function Details({ artifact }: { artifact: Artifact }) {
           )}
         </div>
         {asset.width && asset.height ? (
-          <>
-            <div className="h-px bg-line-tertiary" />
-            <Row icon={<Hash className="size-4" />} label="Dimensions">
-              {asset.width} X {asset.height}
-            </Row>
-          </>
+          <Row icon={<Hash className="size-4" />} label="Dimensions">
+            {asset.width} X {asset.height}
+          </Row>
         ) : null}
         {asset.type === "video" && asset.mimeType ? (
           <Row icon={<Box className="size-4" />} label="Format">
@@ -174,7 +188,8 @@ export function ArtifactPanel() {
 
   // it belongs to one task: moving to another task (or home) closes it
   useEffect(() => {
-    if (isOpen && artifact && artifact.chatId !== chatId) close();
+    // ("" belongs to the home screen, which has no task)
+    if (isOpen && artifact && artifact.chatId !== (chatId ?? "")) close();
   }, [isOpen, artifact, chatId, close]);
 
   // The dialog opens from a picture in the chat rather than from a trigger of its own, so it remembers what
@@ -196,7 +211,7 @@ export function ArtifactPanel() {
             event.preventDefault();
             if (returnFocus.current?.isConnected) returnFocus.current.focus({ preventScroll: true });
           }}
-          className="fixed inset-x-0 bottom-0 z-50 flex h-[95dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-line-tertiary bg-surface-main shadow-xl outline-none md:inset-x-auto md:bottom-auto md:left-1/2 md:top-1/2 md:h-[700px] md:max-h-[calc(100dvh-32px)] md:w-[calc(100vw-32px)] md:max-w-[1248px] md:-translate-x-1/2 md:-translate-y-1/2 md:flex-row md:rounded-xl data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95"
+          className="fixed inset-x-0 bottom-0 z-50 flex h-[95dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-line-tertiary bg-surface-main shadow-[var(--shadow-floating)] outline-none md:inset-x-auto md:bottom-auto md:left-1/2 md:top-1/2 md:h-[700px] md:max-h-[calc(100dvh-32px)] md:w-[calc(100vw-32px)] md:max-w-[1248px] md:-translate-x-1/2 md:-translate-y-1/2 md:flex-row md:rounded-xl data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95"
         >
           {artifact && (
             <>

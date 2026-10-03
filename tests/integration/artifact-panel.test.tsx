@@ -35,8 +35,10 @@ async function openApple() {
   return { ...view, image, dialog };
 }
 
-function openDirectly(asset: Parameters<ReturnType<typeof useChatStore.getState>["openArtifactPanel"]>[0]["asset"]) {
-  useChatStore.getState().openArtifactPanel({ chatId: "chat-apple", asset, createdAt: "2026-10-01T10:00:00Z", openedBy: "user" });
+type Opening = Parameters<ReturnType<typeof useChatStore.getState>["openArtifactPanel"]>[0];
+
+function openDirectly(asset: Opening["asset"], extra: Partial<Opening> = {}) {
+  useChatStore.getState().openArtifactPanel({ chatId: "chat-apple", asset, createdAt: "2026-10-01T10:00:00Z", openedBy: "user", ...extra });
   navigation.params = { chatId: "chat-apple" };
   return renderApp(<ArtifactPanel />);
 }
@@ -169,5 +171,34 @@ describe("a video in the conversation", () => {
     await user.click(await screen.findByRole("button", { name: "Open Waves" }));
     const dialog = await screen.findByRole("dialog", { name: "Video Preview" });
     expect(within(dialog).getByLabelText("Waves").tagName).toBe("VIDEO");
+  });
+});
+
+describe("where a file came from", () => {
+  it("says a file the user uploaded was uploaded, and shows its name", () => {
+    openDirectly({ type: "image", url: "/mock/beach.jpg", altText: "beach.jpg", width: 800, height: 600 }, { source: "upload", name: "beach.jpg" });
+    const d = within(screen.getByRole("dialog"));
+    expect(d.getByText("Uploaded")).toBeInTheDocument();
+    expect(d.queryByText("Generated in chat")).not.toBeInTheDocument();
+    // its name, without the extension, as magica shows it
+    expect(d.getByText("File Name")).toBeInTheDocument();
+    expect(d.getByText("beach")).toHaveAttribute("title", "beach.jpg");
+  });
+
+  it("says a generated picture was generated in the chat, with no file name", () => {
+    openDirectly({ type: "image", url: "/mock/red-apple.svg", prompt: "A red apple" }, { source: "generated", name: null });
+    const d = within(screen.getByRole("dialog"));
+    expect(d.getByText("Generated in chat")).toBeInTheDocument();
+    expect(d.queryByText("File Name")).not.toBeInTheDocument();
+  });
+
+  it("opens an uploaded file from a message as uploaded", async () => {
+    getMockDb().messages["chat-apple"][0].attachments = [
+      { ...getMockDb().media.find((m) => m.id === "media-beach")!, expired: false },
+    ];
+    const { user } = openTask("chat-apple");
+    await user.click(await screen.findByRole("button", { name: "Open beach.jpg" }));
+    const dialog = await screen.findByRole("dialog", { name: "Image Preview" });
+    expect(within(dialog).getByText("Uploaded")).toBeInTheDocument();
   });
 });

@@ -9,6 +9,7 @@ import { clerkState } from "../mocks/clerk";
 import { getMockDb } from "../mocks/fixtures";
 import { navigation } from "../mocks/navigation";
 import { server } from "../mocks/server";
+import { setViewport } from "../setup";
 import { renderApp } from "../utils/render";
 
 const at = (path: string) => `${BACKEND_URL}${path}`;
@@ -108,7 +109,7 @@ describe("navigation", () => {
 
   it("leaves the pages outside this build inert", async () => {
     const { user } = renderApp(<Sidebar />);
-    for (const name of ["Tasks", "Projects", "Library", "Tools", "API / MCP", "Help & Support", "Unfair Advantage"]) {
+    for (const name of ["Tasks", "Projects", "Library", "Tools", "Help & Support", "Unfair Advantage"]) {
       await user.click(screen.getByRole("button", { name }));
     }
     expect(navigation.push).not.toHaveBeenCalled();
@@ -240,6 +241,51 @@ describe("collapsing", () => {
   });
 });
 
+describe("the sidebar shortcut", () => {
+  it("⌘B hides and shows the sidebar, and Ctrl+B does too", async () => {
+    const { user } = renderApp(<Sidebar />);
+    await screen.findByRole("link", { name: "Greeting" });
+    await user.keyboard("{Meta>}b{/Meta}");
+    expect(useUiStore.getState().sidebarCollapsed).toBe(true);
+    expect(screen.getByRole("button", { name: "Open sidebar" })).toBeInTheDocument();
+    await user.keyboard("{Control>}b{/Control}");
+    expect(useUiStore.getState().sidebarCollapsed).toBe(false);
+    // ⌘⇧B is something else
+    await user.keyboard("{Meta>}{Shift>}b{/Shift}{/Meta}");
+    expect(useUiStore.getState().sidebarCollapsed).toBe(false);
+  });
+
+  it("opens and closes the drawer on a phone", async () => {
+    setViewport(false);
+    const { user } = renderApp(<Sidebar />);
+    await user.keyboard("{Meta>}b{/Meta}");
+    expect(useMobileSidebar.getState().open).toBe(true);
+    await user.keyboard("{Meta>}b{/Meta}");
+    expect(useMobileSidebar.getState().open).toBe(false);
+  });
+
+  it("the toggle button shows magica's tooltip: 'Toggle sidebar ⌘ B'", async () => {
+    const { user } = renderApp(<Sidebar />);
+    const toggle = screen.getByRole("button", { name: "Close sidebar" });
+    expect(toggle).toHaveAttribute("aria-keyshortcuts", "Meta+B Control+B");
+    await user.hover(toggle);
+    const tip = await screen.findByRole("tooltip");
+    expect(tip).toHaveTextContent("Toggle sidebar⌘B");
+  });
+});
+
+describe("scrolling", () => {
+  it("keeps New task in place while the rest of the nav scrolls with the tasks, as on magica", async () => {
+    renderApp(<Sidebar />);
+    await screen.findByRole("link", { name: "Greeting" });
+    const scroller = screen.getByRole("navigation", { name: "Main" }).parentElement!;
+    expect(scroller).toHaveClass("overflow-y-auto");
+    expect(within(scroller).getByRole("button", { name: "Tasks" })).toBeInTheDocument();
+    expect(within(scroller).getByRole("region", { name: "Recent tasks" })).toBeInTheDocument();
+    expect(scroller).not.toContainElement(screen.getByRole("link", { name: "New task" }));
+  });
+});
+
 describe("footer", () => {
   it("shows the credit balance", async () => {
     renderApp(<Sidebar />);
@@ -249,7 +295,7 @@ describe("footer", () => {
   it("shows what can still be spent when a run has credits reserved", async () => {
     getMockDb().credits = { balance: 29_660_000, held: 660_000 };
     renderApp(<Sidebar />);
-    expect(await screen.findByText("29.00M")).toBeInTheDocument();
+    expect(await screen.findByText("29M")).toBeInTheDocument();
   });
 
   it("shows a dash instead of a wrong number when credits can't be loaded", async () => {
@@ -351,10 +397,11 @@ describe("when the browser is offline", () => {
 describe("controls that do nothing in this build", () => {
   it("say so to assistive technology, while the real link does not", () => {
     renderApp(<Sidebar />);
-    for (const name of ["Tasks", "Projects", "Library", "Tools", "API / MCP", "Help & Support", "Unfair Advantage", "Search", "Settings"]) {
+    for (const name of ["Tasks", "Projects", "Library", "Tools", "Help & Support", "Unfair Advantage", "Settings"]) {
       expect(screen.getAllByRole("button", { name })[0]).toHaveAttribute("aria-disabled", "true");
     }
     expect(screen.getByRole("link", { name: "New task" })).not.toHaveAttribute("aria-disabled");
+    expect(screen.getByRole("button", { name: "Search" })).not.toHaveAttribute("aria-disabled");
   });
 });
 

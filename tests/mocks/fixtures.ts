@@ -1,4 +1,5 @@
-import type { AgentRun, Chat, ContentBlock, Credits, Message, ModelsResponse, SendMessageResponse } from "@/types";
+import type { AgentRun, Chat, ContentBlock, Credits, MediaAsset, Message, ModelsResponse, SendMessageResponse } from "@/types";
+import type { UploadFile, Waitpoint } from "@/contracts";
 
 export const MOCK_USER_ID = "user_mock";
 
@@ -132,7 +133,66 @@ export interface MockDb {
   sent: Record<string, SendMessageResponse>;
   credits: Credits;
   models: ModelsResponse;
+  // the media library (uploads and generated media), and uploads signed but not yet in it
+  media: MediaAsset[];
+  uploads: Record<string, { file: UploadFile; assetId: string | null }>;
+  // what runs wait on the user for, by id; and the plan-mode runs (by run id): the plans they asked about, in
+  // order, and when one was approved
+  waitpoints: Record<string, Waitpoint>;
+  plans: Record<string, MockPlanRun>;
+  // API keys as the backend stores them (revoked ones are kept, and never listed)
+  apiKeys: MockApiKey[];
   nextId: number;
+}
+
+export interface MockApiKey {
+  id: string;
+  label: string;
+  prefix: string;
+  perMinute: number;
+  perDay: number;
+  expiresAt: string | null;
+  lastUsedAt: string | null;
+  createdAt: string;
+  revokedAt: string | null;
+}
+
+// one key, made yesterday and used today
+export const mockApiKey = (over: Partial<MockApiKey> = {}): MockApiKey => ({
+  id: "key-1",
+  label: "Default",
+  prefix: "mgc_Hnz3gjhh",
+  perMinute: 60,
+  perDay: 1000,
+  expiresAt: null,
+  lastUsedAt: minutesAgo(30),
+  createdAt: minutesAgo(24 * 60),
+  revokedAt: null,
+  ...over,
+});
+
+export interface MockPlanRun {
+  chatId: string;
+  waitpointIds: string[];
+  approvedAt: number | null;
+}
+
+const hoursFromNow = (hours: number) => new Date(Date.now() + hours * 3_600_000).toISOString();
+
+// A small library: two generated pictures (today and two days ago) and two uploads (an image and a song).
+function mediaFixtures(): MediaAsset[] {
+  const generated = (id: string, prompt: string, url: string, minutes: number): MediaAsset => ({
+    id, source: "generated", type: "image", url, name: null, prompt, model: "GPT Image 2", width: 1024, height: 1024, mimeType: "image/png", createdAt: minutesAgo(minutes), expiresAt: null,
+  });
+  const upload = (id: string, name: string, type: MediaAsset["type"], mimeType: string, url: string, minutes: number): MediaAsset => ({
+    id, source: "upload", type, url, name, prompt: null, model: null, width: type === "image" ? 800 : null, height: type === "image" ? 600 : null, mimeType, createdAt: minutesAgo(minutes), expiresAt: hoursFromNow(23 - minutes / 60),
+  });
+  return [
+    upload("media-beach", "beach.jpg", "image", "image/jpeg", "/mock/red-apple.svg", 20),
+    generated("media-apple", APPLE_PROMPT, "/mock/red-apple.svg", 25),
+    upload("media-song", "song.mp3", "audio", "audio/mpeg", "/mock/chime.wav", 60),
+    generated("media-cat", "A cat asleep on a windowsill", "/mock/red-apple.svg", 2 * 24 * 60),
+  ];
 }
 
 export function createMockDb(): MockDb {
@@ -154,8 +214,13 @@ export function createMockDb(): MockDb {
     models: {
       models: [{ id: "openrouter/free", name: "OpenRouter Free", provider: "openrouter", free: true, isDefault: true }],
       defaultModelId: "openrouter/free",
-      status: { health: "available", lastRoutedModel: "meta-llama/llama-3.3-70b-instruct:free", checkedAt: new Date().toISOString() },
+      status: { health: "available", lastRoutedModel: "meta-llama/llama-3.3-70b-instruct:free", reason: null, checkedAt: new Date().toISOString() },
     },
+    media: mediaFixtures(),
+    uploads: {},
+    waitpoints: {},
+    plans: {},
+    apiKeys: [mockApiKey()],
     nextId: 1,
   };
 }

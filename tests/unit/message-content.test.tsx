@@ -253,3 +253,46 @@ describe("audio", () => {
     expect(document.querySelector("audio")).toBeNull();
   });
 });
+
+describe("files on a user's message", () => {
+  const file = (over: Partial<NonNullable<MessageData["attachments"]>[number]>) => ({
+    id: "f1", source: "upload" as const, type: "image" as const, url: "/mock/beach.jpg", name: "beach.jpg", prompt: null, model: null,
+    width: 800, height: 600, mimeType: "image/jpeg", createdAt: "2026-01-01T14:40:00Z", expiresAt: "2026-01-02T13:40:00Z", expired: false, ...over,
+  });
+
+  it("shows them above the text, in the order they were attached", () => {
+    render(
+      <Message
+        message={message({
+          role: "USER",
+          content: "Compare these",
+          attachments: [
+            file({}),
+            file({ id: "f2", type: "audio", name: "song.mp3", mimeType: "audio/mpeg", url: "/mock/song.mp3" }),
+            file({ id: "f3", source: "generated", name: null, prompt: "A red apple", model: "GPT Image 2", expiresAt: null }),
+          ],
+        })}
+      />,
+    );
+    const files = screen.getByRole("list", { name: "Attached files" });
+    const items = within(files).getAllByRole("listitem");
+    expect(items.map((item) => item.querySelector("[aria-label]")?.getAttribute("aria-label"))).toEqual(["Open beach.jpg", "Audio: song.mp3", "Open A red apple"]);
+    expect(files.compareDocumentPosition(screen.getByText("Compare these")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("shows a placeholder for a file that has expired, not a broken picture", () => {
+    render(<Message message={message({ role: "USER", content: "Old one", attachments: [file({ expired: true })] })} />);
+    expect(screen.getByRole("img", { name: "beach.jpg: file expired" })).toHaveTextContent("File expired");
+    expect(document.querySelector("img")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Open beach.jpg" })).not.toBeInTheDocument();
+  });
+
+  it("opens a picture in the preview", async () => {
+    render(<Message message={message({ role: "USER", content: "Look", attachments: [file({})] })} />);
+    await userEvent.setup().click(screen.getByRole("button", { name: "Open beach.jpg" }));
+    expect(useChatStore.getState().artifactPanel).toMatchObject({
+      isOpen: true,
+      artifact: { chatId: "c1", asset: { type: "image", url: "/mock/beach.jpg", altText: "beach.jpg" }, openedBy: "user" },
+    });
+  });
+});

@@ -45,6 +45,16 @@ describe("where Retry shows", () => {
     expect(retryButton()).toBeEnabled();
   });
 
+  it("on a reply that hit the free model's daily limit, with the server's message", async () => {
+    addRetryChat(getMockDb());
+    const daily = "The free model's daily limit is reached. It resets at 00:00 UTC.";
+    const failed = getMockDb().messages["chat-failed"].at(-1)!;
+    failed.errorMessage = daily; // errorCode MODEL_DAILY_LIMIT on the server; the page only gets the message
+    renderApp(<ChatWindow chatId="chat-failed" />);
+    expect(await screen.findByRole("alert")).toHaveTextContent(daily);
+    expect(retryButton()).toBeEnabled();
+  });
+
   it("nowhere else: not on a finished reply", async () => {
     renderApp(<ChatWindow chatId="chat-greeting" />);
     await screen.findByText("Hi! What can I help you with today?");

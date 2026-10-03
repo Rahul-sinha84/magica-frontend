@@ -24,6 +24,8 @@ export function OpenRouterStatus() {
   const health: ModelHealth = data?.status.health ?? "unknown";
   const look = LOOK[health];
   const lastModel = data?.status.lastRoutedModel;
+  // the server's own words for why it can't answer, when there is something specific (the free daily limit)
+  const reason = data?.status.reason;
 
   return (
     <Tooltip>
@@ -44,6 +46,7 @@ export function OpenRouterStatus() {
           <p className="font-medium">Free model</p>
           {lastModel && <p className="break-all">Last answered by {lastModel}</p>}
           {look.note && <p>{look.note}</p>}
+          {reason && <p>{reason}</p>}
         </div>
       </TooltipContent>
     </Tooltip>

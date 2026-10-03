@@ -45,10 +45,11 @@ export function formatDuration(ms: number) {
   return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
 
-// 29_660_000 -> "29.66M", 290_000 -> "0.29M", 9_500 -> "9,500"
+// As magica writes credits, with no trailing zeros: 29_660_000 -> "29.66M", 25_900_000 -> "25.9M", 1_000_000 -> "1M",
+// 290_000 -> "0.29M", 9_500 -> "9,500"
 export function formatCredits(value: number) {
   if (!Number.isFinite(value)) return "—";
-  if (Math.abs(value) >= 10_000) return `${(value / 1_000_000).toFixed(2)}M`;
+  if (Math.abs(value) >= 10_000) return `${(value / 1_000_000).toFixed(2).replace(/\.?0+$/, "")}M`;
   return (Math.round(value) || 0).toLocaleString("en-US"); // `|| 0` avoids printing "-0"
 }
 

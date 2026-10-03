@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import type { ImageBlock, VideoBlock } from "@/types";
+import type { RunMode } from "@/contracts";
+import type { ImageBlock, MessageAttachment, VideoBlock } from "@/types";
 
 // The composer draft for the home screen, where there is no chat yet.
 export const NEW_CHAT = "new";
@@ -11,6 +12,16 @@ export interface OptimisticMessage {
   chatId: string;
   content: string;
   createdAt: string;
+  // the files it carries, in order
+  attachments?: MessageAttachment[];
+}
+
+// A send that didn't go: sent again with the same text, the same files and the same mode, it keeps its id.
+export interface FailedSend {
+  content: string;
+  clientMessageId: string;
+  attachmentIds?: string[];
+  mode?: RunMode;
 }
 
 // A run the server has started and that has not finished yet.
@@ -37,6 +48,10 @@ export interface Artifact {
   createdAt: string | null;
   // how it was opened (magica only opens it from a click)
   openedBy: "user" | "stream";
+  // for a file from the media library: whether the user uploaded it, and its name (uploads have one); a picture
+  // from a reply has neither and was generated in the chat
+  source?: "upload" | "generated";
+  name?: string | null;
 }
 
 interface ArtifactPanel {
@@ -56,8 +71,8 @@ interface ChatStore {
 
   // After a failed send, the same text sent again reuses its id, so the server can tell it is the same
   // message even if the first attempt did reach it.
-  failedSends: Record<string, { content: string; clientMessageId: string }>;
-  rememberFailedSend: (key: string, send: { content: string; clientMessageId: string }) => void;
+  failedSends: Record<string, FailedSend>;
+  rememberFailedSend: (key: string, send: FailedSend) => void;
   forgetFailedSend: (key: string) => void;
 
   // Stop was pressed before the server said which run it is (the send is still in flight). The run is
@@ -65,6 +80,16 @@ interface ChatStore {
   stopRequested: Record<string, true>;
   requestStop: (chatId: string) => void;
   clearStopRequest: (chatId: string) => void;
+
+  // Plan mode (⇧+Tab, or the composer's "Plan" chip): the next messages ask for a plan to approve before anything
+  // is spent. One switch for every composer, as on magica, and not kept across a reload.
+  planMode: boolean;
+  setPlanMode: (on: boolean) => void;
+
+  // waitpoints this tab knows are closed (its own answer came back closed), so their card goes at once, before
+  // the run's own word that it moved on
+  closedWaitpoints: Record<string, true>;
+  closeWaitpoint: (waitpointId: string) => void;
 
   runs: Record<string, RunInFlight>;
   setRun: (chatId: string, run: RunInFlight) => void;
@@ -137,6 +162,12 @@ export const useChatStore = create<ChatStore>()(
       stopRequested: {},
       requestStop: (chatId) => set((s) => ({ stopRequested: { ...s.stopRequested, [chatId]: true } })),
       clearStopRequest: (chatId) => set((s) => ({ stopRequested: without(s.stopRequested, chatId) })),
+
+      planMode: false,
+      setPlanMode: (on) => set({ planMode: on }),
+
+      closedWaitpoints: {},
+      closeWaitpoint: (waitpointId) => set((s) => ({ closedWaitpoints: { ...s.closedWaitpoints, [waitpointId]: true } })),
 
       runs: {},
       setRun: (chatId, run) => set((s) => ({ runs: { ...s.runs, [chatId]: run } })),
