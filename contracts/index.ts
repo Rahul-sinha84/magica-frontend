@@ -11,3 +11,5 @@ export * from "./uploads";
 export * from "./media";
 export * from "./waitpoints";
 export * from "./apikeys";
+export * from "./publicapi";
+export * from "./webhooks";
