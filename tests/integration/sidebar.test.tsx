@@ -9,6 +9,7 @@ import { clerkState } from "../mocks/clerk";
 import { getMockDb } from "../mocks/fixtures";
 import { navigation } from "../mocks/navigation";
 import { server } from "../mocks/server";
+import { setViewport } from "../setup";
 import { renderApp } from "../utils/render";
 
 const at = (path: string) => `${BACKEND_URL}${path}`;
@@ -237,6 +238,51 @@ describe("collapsing", () => {
 
     expect(await screen.findByRole("link", { name: "Greeting" })).toBeInTheDocument();
     expect(screen.getByText("Recent tasks")).toBeInTheDocument();
+  });
+});
+
+describe("the sidebar shortcut", () => {
+  it("⌘B hides and shows the sidebar, and Ctrl+B does too", async () => {
+    const { user } = renderApp(<Sidebar />);
+    await screen.findByRole("link", { name: "Greeting" });
+    await user.keyboard("{Meta>}b{/Meta}");
+    expect(useUiStore.getState().sidebarCollapsed).toBe(true);
+    expect(screen.getByRole("button", { name: "Open sidebar" })).toBeInTheDocument();
+    await user.keyboard("{Control>}b{/Control}");
+    expect(useUiStore.getState().sidebarCollapsed).toBe(false);
+    // ⌘⇧B is something else
+    await user.keyboard("{Meta>}{Shift>}b{/Shift}{/Meta}");
+    expect(useUiStore.getState().sidebarCollapsed).toBe(false);
+  });
+
+  it("opens and closes the drawer on a phone", async () => {
+    setViewport(false);
+    const { user } = renderApp(<Sidebar />);
+    await user.keyboard("{Meta>}b{/Meta}");
+    expect(useMobileSidebar.getState().open).toBe(true);
+    await user.keyboard("{Meta>}b{/Meta}");
+    expect(useMobileSidebar.getState().open).toBe(false);
+  });
+
+  it("the toggle button shows magica's tooltip: 'Toggle sidebar ⌘ B'", async () => {
+    const { user } = renderApp(<Sidebar />);
+    const toggle = screen.getByRole("button", { name: "Close sidebar" });
+    expect(toggle).toHaveAttribute("aria-keyshortcuts", "Meta+B Control+B");
+    await user.hover(toggle);
+    const tip = await screen.findByRole("tooltip");
+    expect(tip).toHaveTextContent("Toggle sidebar⌘B");
+  });
+});
+
+describe("scrolling", () => {
+  it("keeps New task in place while the rest of the nav scrolls with the tasks, as on magica", async () => {
+    renderApp(<Sidebar />);
+    await screen.findByRole("link", { name: "Greeting" });
+    const scroller = screen.getByRole("navigation", { name: "Main" }).parentElement!;
+    expect(scroller).toHaveClass("overflow-y-auto");
+    expect(within(scroller).getByRole("button", { name: "Tasks" })).toBeInTheDocument();
+    expect(within(scroller).getByRole("region", { name: "Recent tasks" })).toBeInTheDocument();
+    expect(scroller).not.toContainElement(screen.getByRole("link", { name: "New task" }));
   });
 });
 

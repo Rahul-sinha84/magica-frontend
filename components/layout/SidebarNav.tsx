@@ -82,16 +82,26 @@ function NavItem({ entry, rail }: { entry: Entry; rail: boolean }) {
   );
 }
 
-export function SidebarNav({ rail }: { rail: boolean }) {
-  return (
-    <nav aria-label="Main" className={cn("px-2 pb-1", rail && "flex flex-col items-center px-0")}>
-      <ul className="space-y-1">
-        {ENTRIES.map((entry) => (
-          <li key={entry.label}>
-            <NavItem entry={entry} rail={rail} />
-          </li>
-        ))}
-      </ul>
+// As on magica, "New task" stays put at the top (`part="top"`) while the other entries scroll away with the task
+// list below them (`part="rest"`).
+export function SidebarNav({ rail, part }: { rail: boolean; part: "top" | "rest" }) {
+  const entries = part === "top" ? ENTRIES.slice(0, 1) : ENTRIES.slice(1);
+  const list = (
+    <ul className="space-y-1">
+      {entries.map((entry) => (
+        <li key={entry.label}>
+          <NavItem entry={entry} rail={rail} />
+        </li>
+      ))}
+    </ul>
+  );
+  const className = cn("px-2 pb-1", rail && "flex flex-col items-center px-0");
+  // the main navigation is the scrolling part; the one fixed row above it needs no landmark of its own
+  return part === "top" ? (
+    <div className={cn(className, "shrink-0")}>{list}</div>
+  ) : (
+    <nav aria-label="Main" className={className}>
+      {list}
     </nav>
   );
 }
