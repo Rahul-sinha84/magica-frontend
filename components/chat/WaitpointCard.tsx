@@ -19,8 +19,8 @@ const outline = cn(button, "border border-line-secondary bg-surface-main px-3 te
 const dark = cn(button, "bg-primary px-4 text-white hover:bg-primary/90");
 
 // The plan as magica lays it out: its title and overview, the numbered steps with what each should cost, the
-// estimated total, and any notes. Shown on the card while it waits, and when a past plan is opened.
-export function PlanSections({ plan }: { plan: PlanPayload }) {
+// estimated total, and any notes.
+function PlanSections({ plan }: { plan: PlanPayload }) {
   return (
     <div className="divide-y divide-line-tertiary">
       <div className={section}>
@@ -58,16 +58,14 @@ export function PlanSections({ plan }: { plan: PlanPayload }) {
   );
 }
 
-// A spend for approval: each call with its tool's name and price, and the total. `asking` while it waits.
-export function SpendSections({ spend, asking = false }: { spend: CreditPayload; asking?: boolean }) {
+// A spend waiting for approval: each call with its tool's name and price, and the total.
+function SpendSections({ spend }: { spend: CreditPayload }) {
   return (
     <div className="divide-y divide-line-tertiary">
-      {asking && (
-        <div className={section}>
-          <h3 className="text-sm font-semibold text-text-primary">Approve this spend?</h3>
-          <p className="mt-1 text-sm leading-[22.75px] text-text-secondary">The next step costs more than runs without asking. Nothing is charged unless you approve.</p>
-        </div>
-      )}
+      <div className={section}>
+        <h3 className="text-sm font-semibold text-text-primary">Approve this spend?</h3>
+        <p className="mt-1 text-sm leading-[22.75px] text-text-secondary">The next step costs more than runs without asking. Nothing is charged unless you approve.</p>
+      </div>
       <ul aria-label="Calls" className={cn(section, "flex flex-col")}>
         {spend.calls.map((call) => (
           <li key={call.toolCallId} className="flex items-center gap-3 rounded-[10px] px-3 py-2">
@@ -144,7 +142,7 @@ export function WaitpointCard({ chatId, waitpoint }: { chatId: string; waitpoint
       className="flex max-h-[min(60vh,560px)] w-full flex-col overflow-hidden rounded-xl border border-line-tertiary bg-surface-main"
     >
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {waitpoint.type === "plan" ? <PlanSections plan={waitpoint.payload} /> : <SpendSections spend={waitpoint.payload} asking />}
+        {waitpoint.type === "plan" ? <PlanSections plan={waitpoint.payload} /> : <SpendSections spend={waitpoint.payload} />}
       </div>
       {error && (
         <p role="alert" className="shrink-0 border-t border-line-tertiary px-5 py-2 text-xs text-destructive">

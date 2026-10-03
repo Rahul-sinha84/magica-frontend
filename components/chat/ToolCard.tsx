@@ -100,7 +100,8 @@ export function ToolCard({ call, result }: { call: ToolCallBlock; result?: ToolR
       </span>
       {OutputMark && <OutputMark className="size-3 shrink-0 text-[#181818] dark:text-text-primary" aria-hidden="true" />}
       {call.durationMs !== undefined && (
-        <span className="inline-flex shrink-0 items-center gap-0.5 font-mono text-xs font-medium leading-4 text-text-primary">
+        // magica writes durations in the body font, with figures of equal width
+        <span className="inline-flex shrink-0 items-center gap-0.5 text-xs font-medium leading-4 tabular-nums text-text-primary">
           <Clock className="size-2.5" aria-hidden="true" />
           {formatDuration(call.durationMs)}
         </span>

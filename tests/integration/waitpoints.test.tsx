@@ -410,7 +410,7 @@ describe("the plan card", () => {
     realtime.push({ type: "waitpoint-end", waitpointId: "wp-1", status: "approved", waitedMs: 76_000 });
     await waitFor(() => noCard());
     expect(screen.getByText("Plan approved")).toBeInTheDocument();
-    expect(screen.getByText("· 1m 16s")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Plan approved/ })).toHaveTextContent("1m 16s");
   });
 
   it("after an answer, 'Thinking' shows under it until the run's next step arrives", async () => {

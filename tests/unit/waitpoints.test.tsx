@@ -29,26 +29,51 @@ const serverWaitpoint = (id: string): Waitpoint => ({
 const view = (blocks: ContentBlock[]) => render(<MessageContent blocks={blocks} chatId="c1" />);
 
 describe("waitpoints in a saved reply", () => {
-  it("an approved plan: 'Plan approved', a check, and how long it waited; opening it shows the plan", async () => {
+  // the key/value table a step opens to: each label with its value
+  const table = () => screen.getAllByText(/^(Title|Overview|Step \d+|Total estimated|Notes|Call \d+|Total)$/).map((label) => [label.textContent, label.nextElementSibling?.textContent]);
+
+  it("an approved plan: 'Plan approved', a check, a clock and how long it waited, laid out like a tool step", async () => {
     view([planBlock("approved", { waitedMs: 76_000 })]);
     const row = screen.getByRole("button", { name: /Plan approved/ });
-    expect(row).toHaveTextContent("Plan approved· 1m 16s");
+    expect(row).toHaveTextContent(/^Plan approved1m 16s$/); // no "·" between them
+    expect(within(row).getByRole("img", { name: "Approved" })).toBeInTheDocument();
     expect(row).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByText(PLAN.title)).not.toBeInTheDocument();
+  });
 
+  it("opens to the tool steps' key/value table: title, overview, each step with its cost, the total and notes", async () => {
+    view([
+      planBlock("approved", {
+        waitedMs: 76_000,
+        payload: { ...PLAN, steps: [{ ...PLAN.steps[0], description: "A realistic fox in a forest." }, PLAN.steps[1]], notes: "Generated first, then cropped." },
+      }),
+    ]);
+    const row = screen.getByRole("button", { name: /Plan approved/ });
     await userEvent.click(row);
     expect(row).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByRole("heading", { name: PLAN.title })).toBeInTheDocument();
-    const steps = within(screen.getByRole("list", { name: "Steps" })).getAllByRole("listitem");
-    expect(steps).toHaveLength(2);
-    expect(screen.getByText("~0.0737M credits")).toBeInTheDocument();
+    expect(table()).toEqual([
+      ["Title", PLAN.title],
+      ["Overview", PLAN.overview],
+      ["Step 1", "Generate the fox (~0.0687M)\nA realistic fox in a forest."],
+      ["Step 2", "Crop it (~0.005M)"],
+      ["Total estimated", "~0.0737M credits"],
+      ["Notes", "Generated first, then cropped."],
+    ]);
     // a past plan has nothing to answer
     expect(screen.queryByRole("button", { name: "Run All" })).not.toBeInTheDocument();
   });
 
+  it("cuts long content off, as the tool steps do", async () => {
+    view([planBlock("approved", { payload: { ...PLAN, overview: "x".repeat(2500) } })]);
+    await userEvent.click(screen.getByRole("button", { name: /Plan approved/ }));
+    const overview = screen.getByText("Overview").nextElementSibling!.textContent!;
+    expect(overview).toHaveLength(2001);
+    expect(overview.endsWith("…")).toBe(true);
+  });
+
   it("changes requested, with what was asked for", () => {
     view([planBlock("changes_requested", { feedback: "make it a red fox", waitedMs: 12_000 })]);
-    expect(screen.getByRole("button", { name: /Changes requested/ })).toHaveTextContent("· 12.0s");
+    expect(screen.getByRole("button", { name: /Changes requested/ })).toHaveTextContent(/^Changes requested12\.0s$/);
     expect(screen.getByText("“make it a red fox”")).toBeInTheDocument();
   });
 
@@ -57,8 +82,10 @@ describe("waitpoints in a saved reply", () => {
     expect(screen.getByRole("button", { name: /Spend approved/ })).toBeInTheDocument();
     const declined = screen.getByRole("button", { name: /Spend declined/ });
     await userEvent.click(declined);
-    expect(screen.getByText("GPT Image 2")).toBeInTheDocument();
-    expect(screen.getByText("0.07M credits")).toBeInTheDocument();
+    expect(table()).toEqual([
+      ["Call 1", "GPT Image 2 (0.07M)"],
+      ["Total", "0.07M credits"],
+    ]);
     expect(screen.queryByRole("button", { name: "Approve" })).not.toBeInTheDocument();
   });
 

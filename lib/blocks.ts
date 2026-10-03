@@ -80,8 +80,11 @@ function show(value: unknown) {
       text = String(value);
     }
   }
-  return text.length > MAX_VALUE_LENGTH ? `${text.slice(0, MAX_VALUE_LENGTH)}…` : text;
+  return clip(text);
 }
+
+// A value in a step's key/value table, cut off when it runs long.
+export const clip = (text: string) => (text.length > MAX_VALUE_LENGTH ? `${text.slice(0, MAX_VALUE_LENGTH)}…` : text);
 
 // A tool's name as the UI shows it: the backend's label for its own tools, a readable version of anything else.
 export function toolTitle(name: string) {
